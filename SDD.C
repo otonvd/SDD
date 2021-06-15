@@ -167,15 +167,20 @@ hkt->GetYaxis()->SetTitle("TDC3+TDC4");
 hktrot->GetXaxis()->SetTitle("rotated TDC");
 
 TH1F* hdrift = new TH1F("hdrift","",2000,-33000,-31000);
-TH2F* hEdrift = new TH2F("hEdrift","",200,0,20000,200,-33000,-31000);
+TH2F* hEdrift = new TH2F("hEdrift","",200,0,24000,200,-33000,-31000);
+TH2F* hEdrift_overflow = new TH2F("hEdrift_overflow","",1000,21000,24000,200,-33000,33000);
+TH2F* hEdrift_normal = new TH2F("hEdrift_normal","",200,0,20000,200,-33000,33000);
+
 hdrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 hEdrift->GetXaxis()->SetTitle("E (eV)");
 hEdrift->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
-
+hEdrift_overflow->GetXaxis()->SetTitle("E (eV)");
+hEdrift_normal->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 
 //Energy plots:
 float xminE = 0.;
-float xmaxE = 20000.;
+//float xmaxE = 20000.;
+float xmaxE = 24000.;
 int nbinsE = 4000;
 TH1F* hE[nSDD]; // Calibrated energy spectrum
 TH1F* hE_trig[nSDD]; // Calibrated energy spectrum
@@ -196,7 +201,7 @@ hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 for(int iSDD = 0;iSDD<nSDD;iSDD++){
  hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig[iSDD] = new TH1F(Form("hE%i_trig",iSDD),"",nbinsE,xminE,xmaxE);
- hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,20000,200,-33000,-31000);
+ hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,24000,200,-33000,-31000);
  hE[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hE_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hEdrift_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
@@ -206,6 +211,10 @@ TH1F* hEsum_trig_tdc = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc");hEsum_trig_tdc
 TH1F* hEsum_trig_tdc_drift = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc_drift");hEsum_trig_tdc_drift->SetName("hEsum_trig_tdc_drift");
 TH1F* hEsum_trig_mip = (TH1F*)hEsum_trig->Clone("hEsum_trig_mip");hEsum_trig_mip->SetName("hEsum_trig_mip");
 TH1F* hEsum_trig_mip_nodrift = (TH1F*)hEsum_trig->Clone("hEsum_trig_mip_nodrift");hEsum_trig_mip_nodrift->SetName("hEsum_trig_mip_nodrift");
+TH1F* hEsum_external = (TH1F*)hEsum->Clone("hEsum_external");hEsum_external->SetName("hEsum_external");
+TH1F* hEsum_internal = (TH1F*)hEsum->Clone("hEsum_internal");hEsum_internal->SetName("hEsum_internal");
+TH1F* hEsum_external_tdc_drift = (TH1F*)hEsum->Clone("hEsum_external_tdc_drift");hEsum_external_tdc_drift->SetName("hEsum_external_tdc_drift");
+TH1F* hEsum_internal_tdc_drift = (TH1F*)hEsum->Clone("hEsum_internal_tdc_drift");hEsum_internal_tdc_drift->SetName("hEsum_internal_tdc_drift");
 
 
 //get calibration if available:
@@ -466,7 +475,13 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
       goodcalSDD[theSDD]=1;
       hEsum->Fill(theE);
       hEsumCP->Fill(theE,CP);
-     }
+      if((theSDD)<33){
+       hEsum_external->Fill(theE);
+      }
+      else{
+       hEsum_internal->Fill(theE);
+      }
+     } 
     }
    }else{ // TRIGGERED:
     hE_trig[theSDD]->Fill(theE);
@@ -475,8 +490,15 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
      hEsum_trig->Fill(theE);
      if((ktrot>5880&&ktrot<5950)||(ktrot>6100&&ktrot<6170)){
       hEsum_trig_tdc->Fill(theE);
-      if((drift[ihit]>-32600&&drift[ihit]<-32400)){
+ //   if((drift[ihit]>-32600&&drift[ihit]<-32400)){
+      if((drift[ihit]>-32600&&drift[ihit]<-32375)){
        hEsum_trig_tdc_drift->Fill(theE);
+        if((theSDD)<33){
+        hEsum_external_tdc_drift->Fill(theE);
+        }
+       else{
+       hEsum_internal_tdc_drift->Fill(theE);
+       }
       }
      }
     else{
@@ -486,7 +508,15 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
      }
     }
      hEsumCP_trig->Fill(theE,CP);
-     hEdrift->Fill(theE,drift[ihit]);
+     hEdrift->Fill(theE,drift[ihit]); 
+
+     if((theE)>21500){
+      hEdrift_overflow->Fill(theE,drift[ihit]);
+     }
+     else{
+     hEdrift_normal->Fill(theE,drift[ihit]);
+     }
+
     }
    }
   }
@@ -1041,8 +1071,10 @@ hEsum_trig_tdc->Write();
 hEsum_trig_tdc_drift->Write();
 hEsum_trig_mip->Write();
 hEsum_trig_mip_nodrift->Write();
-
-
+hEsum_external->Write();
+hEsum_internal->Write();
+hEsum_external_tdc_drift->Write();
+hEsum_internal_tdc_drift->Write();
 
 htotalSDDsummed->Fill(isummed);
 cout<<isummed<<" summed sdd's"<<endl;
@@ -1058,6 +1090,9 @@ hkt->Write();
 hktrot->Write();
 hdrift->Write();
 hEdrift->Write();
+hEdrift_overflow->Write();
+hEdrift_normal->Write();
+
 
 fout->Close();
 
