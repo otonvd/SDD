@@ -166,24 +166,24 @@ hkt->GetXaxis()->SetTitle("TDC1+TDC2");
 hkt->GetYaxis()->SetTitle("TDC3+TDC4");
 hktrot->GetXaxis()->SetTitle("rotated TDC");
 
-TH1F* hdrift = new TH1F("hdrift","",2000,-33000,-31000);
-TH2F* hEdrift = new TH2F("hEdrift","",200,0,24000,200,-33000,-31000);
-TH2F* hEdrift_overflow = new TH2F("hEdrift_overflow","",1000,21000,24000,200,-33000,33000);
-TH2F* hEdrift_normal = new TH2F("hEdrift_normal","",200,0,20000,200,-33000,33000);
-
+TH1F* hdrift = new TH1F("hdrift","",1000,-33000,-31000);
+TH1F* hdrift_unzoom = new TH1F("hdrift_unzoom","",2000,-33000,33000);
 hdrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+hdrift_unzoom->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+
+TH2F* hEdrift = new TH2F("hEdrift","",200,0,24000,200,-33000,-31000);
 hEdrift->GetXaxis()->SetTitle("E (eV)");
 hEdrift->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
-hEdrift_overflow->GetXaxis()->SetTitle("E (eV)");
-hEdrift_normal->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+hEdrift->GetYaxis()->SetTitleOffset(1.5);
 
 //Energy plots:
 float xminE = 0.;
 //float xmaxE = 20000.;
 float xmaxE = 24000.;
-int nbinsE = 4000;
+int nbinsE = 480;
 TH1F* hE[nSDD]; // Calibrated energy spectrum
 TH1F* hE_trig[nSDD]; // Calibrated energy spectrum
+TH1F* hE_trig_tdc_drift[nSDD]; // Calibrated energy spectrum
 TH2F* hEdrift_trig[nSDD]; // Calibrated energy spectrum
 bool SUMMED[nSDD] = {};
 float xminCP = 0.;
@@ -201,9 +201,11 @@ hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 for(int iSDD = 0;iSDD<nSDD;iSDD++){
  hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig[iSDD] = new TH1F(Form("hE%i_trig",iSDD),"",nbinsE,xminE,xmaxE);
+ hE_trig_tdc_drift[iSDD] = new TH1F(Form("hE%i_trig_tdc_drift",iSDD),"",nbinsE,xminE,xmaxE);
  hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,24000,200,-33000,-31000);
  hE[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hE_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hE_trig_tdc_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hEdrift_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hEdrift_trig[iSDD]->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 }
@@ -459,6 +461,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
   }else{ //  if(trigg[ihit]!=1)
    hADC_trig[theSDD]->Fill(theADC);
    hdrift->Fill(drift[ihit]);
+   hdrift_unzoom->Fill(drift[ihit]);
   }//end triggered hits
 
 
@@ -477,8 +480,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
       hEsumCP->Fill(theE,CP);
       if((theSDD)<33){
        hEsum_external->Fill(theE);
-      }
-      else{
+      }else{
        hEsum_internal->Fill(theE);
       }
      } 
@@ -493,33 +495,24 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  //   if((drift[ihit]>-32600&&drift[ihit]<-32400)){
       if((drift[ihit]>-32600&&drift[ihit]<-32375)){
        hEsum_trig_tdc_drift->Fill(theE);
-        if((theSDD)<33){
+       hE_trig_tdc_drift[theSDD]->Fill(theE);
+       if((theSDD)<33){
         hEsum_external_tdc_drift->Fill(theE);
-        }
-       else{
-       hEsum_internal_tdc_drift->Fill(theE);
+       }else{
+        hEsum_internal_tdc_drift->Fill(theE);
        }
       }
+     }else{
+      hEsum_trig_mip->Fill(theE);
+      if((drift[ihit]>-32400)){
+       hEsum_trig_mip_nodrift->Fill(theE);
+      }
      }
-    else{
-     hEsum_trig_mip->Fill(theE);
-     if((drift[ihit]>-32400)){
-      hEsum_trig_mip_nodrift->Fill(theE);
-     }
-    }
      hEsumCP_trig->Fill(theE,CP);
      hEdrift->Fill(theE,drift[ihit]); 
-
-     if((theE)>21500){
-      hEdrift_overflow->Fill(theE,drift[ihit]);
-     }
-     else{
-     hEdrift_normal->Fill(theE,drift[ihit]);
-     }
-
     }
-   }
-  }
+   }//triggered
+  }//we have calib
 
 
 
@@ -597,17 +590,18 @@ double eAu_LB = 11513.5;
 
 //Peak Finder configuration:
 //==========================
-const int nPFPeaks = 3;//number of peaks for peak finder
-float xminPeakFinder = 1500;// Region of peak finding
-float xmaxPeakFinder = 3800;
-int sigmaPeakFinder = 10; //sigma for peak Finder, in adc channels
-float InitThresholdPeakFinder = 0.05; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
-float InitTolerance = 0.05; // 5% -> Tolerance to check that peak assumption is correct
+const int nPFPeaksMAX = 13;//number of MAX peaks for peak finder
+const int nPFPeaks = 3;//number DESIRED of peaks for peak finder
+float xminPeakFinder = 1600;// Region of peak finding
+float xmaxPeakFinder = 3900;
+int sigmaPeakFinder = 20; //sigma for peak Finder, in adc channels
+float InitThresholdPeakFinder = 0.01; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
+float InitTolerance = 0.02; // 5% -> Tolerance to check that peak assumption is correct
 Double_t *xpeaks;
 Double_t *ypeaks;
-float xadc[nPFPeaks] ={-1.};
-float yadc[nPFPeaks] ={-1.};
-float PFPeakE[nPFPeaks] ={-1.};
+float xadc[nPFPeaksMAX] ={};
+float yadc[nPFPeaksMAX] ={};
+float PFPeakE[nPFPeaks] ={};
 TString* PFPeakName[nPFPeaks];
 TF1* fPeakFinder[nSDD];
 TH1F* hPreCal[nSDD];
@@ -617,7 +611,7 @@ TGraph* gPreCalG = new TGraph();gPreCalG->SetName("gPreCalG");
 TGraph* gPreCalG0 = new TGraph();gPreCalG0->SetName("gPreCalG0");
 int ipoint = 0;
 TF1* fPreCal[nSDD];
-TSpectrum *spectrum = new TSpectrum(nPFPeaks);
+TSpectrum *spectrum = new TSpectrum(nPFPeaksMAX);
 TObjArray* fPeakFinderArray = new TObjArray();
 TObjArray* fPreCalArray = new TObjArray();
 if(IsCalib){
@@ -715,6 +709,7 @@ float xmaxPre[nPeaksMAX] = {-1.};
 
 //sdd loop
 //--------
+int NgoodCal = 0;
 for(int iSDD=0;iSDD<nSDD;iSDD++){
 //for(int iSDD=0;iSDD<12;iSDD++){//for testing
  if(writeSDD[iSDD]){
@@ -738,15 +733,13 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    printf("Found %d candidate peaks to fit\n",nfound);
    thresholdPeakFinder = thresholdPeakFinder*.1;//TSpectrum std=0.05. Change it til it finds the peaks
   }
-
   xpeaks = spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
   ypeaks = spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
 
   //reorder in adc counts and check if compatible with maximum peaks assumption
   themin = 999999.;
   imin = 0;
-  for(int i =0;i<nfound;i++){
-   //find the smallest, write it in xadc and remove it:
+  for(int i =0;i<nfound;i++){ //find the smallest, write it in xadc and remove it:
    themin = 999999.;
    for(int j =0;j<nfound;j++){
     if(xpeaks[j]<themin){
@@ -758,43 +751,73 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    yadc[i]=ypeaks[imin];
    xpeaks[imin]=999999.;
   }
-  //find also the highest height:
-  float highestheight = 0.;
-  for(int i =0;i<nfound;i++){
-   if(yadc[i]>highestheight) highestheight = yadc[i];
-  }
-
   //print them, now ordered:
   for(int i =0;i<nfound;i++){cout<<" found peak ADC="<<xadc[i]<<" height "<<yadc[i]<<endl;}
   cout<<endl;
+
 
   //check if the peaks found are compatible with the assumption:
   //------------------------------------------------------------
   float eDist10 = PFPeakE[1]-PFPeakE[0];
   float eDist21 = PFPeakE[2]-PFPeakE[1];
   float Erelation = eDist21/eDist10;
-  float xDist10 = xadc[1]-xadc[0];
-  float xDist21 = xadc[2]-xadc[1];
-  float ADCrelation = eDist21/eDist10;
-  cout<<" Check assumption: Energy relation "<<Erelation<<" vs ADC relation "<<ADCrelation<<endl;
+  //make trios out of all found peaks:
+  float GPF =0.;
+  float G0PF =0;
+  bool TestPassed = false;
+  int ipeak0 = -1;
+  int ipeak1 = -1;
+  int ipeak2 = -1;
+  for(int i0=0; i0<nfound; i0++){
+   for(int i1=i0+1; i1<nfound; i1++){
+    for(int i2=i1+1; i2<nfound; i2++){
+     cout<<endl<<" -> trying trio "<<i0<<" "<<i1<<" "<<i2<<endl;   
 
+     float xDist10 = xadc[i1]-xadc[i0];
+     float xDist21 = xadc[i2]-xadc[i1];
+     float ADCrelation = xDist21/xDist10;
+     cout<<" Check assumption: Energy relation "<<Erelation<<" vs ADC relation "<<ADCrelation<<endl;
 
-  //Define tolerance parameter
-  float tol = InitTolerance; // 5%
-  if(fabs(1.-(Erelation/ADCrelation))>tol){
-   for(int i=0;i<10;i++){
-    cout<<endl<<" tolERROR "<<endl<<endl<<" tolERROR"<<endl;
+     //Define tolerance parameter
+     float tol = InitTolerance; // 5%
+     bool TolerancePass = true;
+     if(fabs(1.-(Erelation/ADCrelation))>tol) TolerancePass = false;
+     if(!TolerancePass) cout<<" Tolerance not passed: tolERROR!!!  "<<endl;
+
+     // Get Peak Finder calibration Offset G0PF and Slope GPF
+     float Dadc = xadc[i0]-xadc[i1];
+     float De = PFPeakE[0]-PFPeakE[1];
+     GPF = De/Dadc;
+     G0PF = -1.*xadc[i0]*GPF+PFPeakE[0];
+     cout<<"PeakFinder cal, offset G0PF "<<G0PF<<" slope GPF "<<GPF<<endl;
+
+     //define an acceptable gain and offset and check if tolerance, G, and G0 are ok:
+     float mingoodG = 2.9;float maxgoodG = 3.5;
+     float mingoodG0 = -3000;float maxgoodG0 = -1000;
+     if(GPF<maxgoodG&&GPF>mingoodG&&G0PF<maxgoodG0&&G0PF>mingoodG0&&TolerancePass){
+      cout<<" -- TEST PASSED! --"<<endl<<endl; 
+      TestPassed = true;
+      ipeak0 = i0;
+      ipeak1 = i1;
+      ipeak2 = i2;
+      NgoodCal++;
+     }
+     if(TestPassed) break;
+    }
+    if(TestPassed) break;
    }
+   if(TestPassed) break;
   }
 
-  // Peak Finder calibration Offset G0PF and Slope GPF
-  float Dadc = xadc[0]-xadc[1];
-  float De = PFPeakE[0]-PFPeakE[1];
-  float GPF = De/Dadc;
-  float G0PF = -1.*xadc[0]*GPF+PFPeakE[0];
-  cout<<"PeakFinder cal, offset G0PF "<<G0PF<<" slope GPF "<<GPF<<endl;
+  //find also the highest height among the selected ones (ipeak0,ipeak1,ipeak2):
+  float highestheight = 0.;
+  if(ipeak0>-1){
+   if(yadc[ipeak0]>highestheight) highestheight = yadc[ipeak0];
+   if(yadc[ipeak1]>highestheight) highestheight = yadc[ipeak1];
+   if(yadc[ipeak2]>highestheight) highestheight = yadc[ipeak2];
+  }
 
-  // peak finder histograms and function:
+  // peak finder all done, now a couple of  histograms and function:
   fPeakFinder[iSDD] = new TF1(Form("fPeakFinder%i",iSDD),"pol1",0.,8000.);
   fPeakFinder[iSDD]->SetParameter(0,G0PF);
   fPeakFinder[iSDD]->SetParameter(1,GPF);
@@ -823,7 +846,7 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    TF1* fPre = new TF1("fPre",fstr,xminPre[0],xmaxPre[nPeaks-1]);
    //set initial parameters:
    for(int i=0;i<nPeaks;i++){
-    fPre->SetParameter(iInt[i], yadc[0]*sigmaADCguess );//initial value: height of 1st PF peak * sigma
+    fPre->SetParameter(iInt[i],highestheight*sigmaADCguess);//initialize: height of highest PFpeak*sigma
     //cout<<"fPre->SetParameter("<<iInt[i]<<","<<yadc[0]*sigmaADCguess<<");"<<endl;
     fPre->SetParameter(iMean[i],  (PeakE[i]-G0PF)/GPF   );
     //cout<<"fPre->SetParameter("<<iMean[i]<<","<<(PeakE[i]-G0PF)/GPF<<");"<<endl;
@@ -839,7 +862,8 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    //cout<<"fPre->SetParameter("<<ip1<<",0.);"<<endl;
  
    //do the pre-Fit
-   thehisto->Fit(fPre,"","0R",xminPre[0],xmaxPre[nPeaks-1]);
+   //thehisto->Fit(fPre,"","0R",xminPre[0],xmaxPre[nPeaks-1]);
+   thehisto->Fit(fPre,"","R",xminPre[0],xmaxPre[nPeaks-1]);
  
    //put back original errors:
    for(int ibin=1;ibin<=thehisto->GetNbinsX();ibin++){
@@ -859,6 +883,8 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    gPreCal[iSDD]->Fit(fline,"0");
    float G0Pre = -1.*fline->GetParameter(0)/fline->GetParameter(1);
    float GPre = 1./fline->GetParameter(1);
+   cout<<endl<<" PRECALIBRATION COMPLETED: G0 = "<<G0Pre<<"    G = "<<GPre<<endl<<endl<<endl;
+
    //PreCal histograms and function:
    hPreCal[iSDD] = (TH1F*) thehisto->Clone(Form("hPreCal%i",iSDD));
    hPreCal[iSDD]->SetName(Form("hPreCal%i",iSDD));
@@ -889,6 +915,7 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
 
  }//if write
 }//sdd loop
+cout<<endl<<" NICELY CALIBRATED SDD's = "<<NgoodCal<<endl<<endl;
 }//if(IsCalib)
 
 
@@ -1038,6 +1065,7 @@ rate_c->Write();
  //---------------------------------------------
  TObjArray* hEarray = new TObjArray();
  TObjArray* hEarray_trig = new TObjArray();
+ TObjArray* hEarray_trig_tdc_drift = new TObjArray();
  TObjArray* hEarray_drift = new TObjArray();
 
 
@@ -1056,12 +1084,14 @@ rate_c->Write();
    }
    hEarray->Add(hE[iSDD]);
    hEarray_trig->Add(hE_trig[iSDD]);
+   hEarray_trig_tdc_drift->Add(hE_trig_tdc_drift[iSDD]);
    hEarray_drift->Add(hEdrift_trig[iSDD]);
   }
  }//iSDD
 
 hEarray->Write("hEarray",TObject::kSingleKey);
 hEarray_trig->Write("hEarray_trig",TObject::kSingleKey);
+hEarray_trig_tdc_drift->Write("hEarray_trig_tdc_drift",TObject::kSingleKey);
 hEarray_drift->Write("hEarray_drift",TObject::kSingleKey);
 
 
@@ -1089,9 +1119,9 @@ hktwide->Write();
 hkt->Write();
 hktrot->Write();
 hdrift->Write();
+hdrift_unzoom->Write();
+
 hEdrift->Write();
-hEdrift_overflow->Write();
-hEdrift_normal->Write();
 
 
 fout->Close();
