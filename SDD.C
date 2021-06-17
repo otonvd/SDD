@@ -27,12 +27,6 @@ int WriteIfHits = 999;//write SDD (and calib) if at least 1k hits
 int nbinsadc = 8000;
 int minadc = 0.;
 int maxadc = 8000.;
-// test
-//testtest
-//testtesttest
-//testtesttest
-//testtesttest
-//testtesttest
 
 //plain adc spectra
 TH1F* hADC[nSDD];
@@ -61,6 +55,7 @@ nbinsadc = nbinsadc/rebinfactor;//rebin for 2D histos
 
 //ADC
 TH2F* hADCpre[nSDD];
+TH2F* hADCpre_trig[nSDD];
 //TH2F* hADCpre_[nSDD][nSDD];
 TH2F* hADCpre_[nSDD][nSDD+2];//+2 to add two histos: InSfera, NotInSfera
 TH2F* hADCpreBADtime[nSDD];
@@ -82,6 +77,7 @@ TH1F* hADCgoodWithCurrent[nSDD];
 
 for(int iSDD=0;iSDD<nSDD;iSDD++){
  hADCpre[iSDD] = new TH2F(Form("ADCpre%i",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
+ hADCpre_trig[iSDD] = new TH2F(Form("ADCpre%i_trig",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
  for(int jSDD=0;jSDD<nSDD;jSDD++){
   hADCpre_[iSDD][jSDD] = new TH2F(Form("ADC%i_pre%i",iSDD,jSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
  }
@@ -147,6 +143,19 @@ float CP;
 bool ISGOODtime,ISGOODevdiff;
 int rmin,rmax,totmin;
 float PI = 3.14159265359;
+const int npre = 10;
+int preSDDt[npre] = {};
+int preADCt[npre] = {};
+bool pretrig[npre] = {};
+int postSDDt[npre] = {};
+int postADCt[npre] = {};
+bool posttrig[npre] = {};
+int preTimeDifft[npre] = {};
+int postTimeDifft[npre] = {};
+int preEvDifft[npre] = {};
+int postEvDifft[npre] = {};
+int nprehits =0;
+int nposthits =0;
 
 //vectors and deques for rate and current calculation
 deque<int> rate_nhits;
@@ -182,6 +191,12 @@ hEdrift->GetXaxis()->SetTitle("E (eV)");
 hEdrift->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 hEdrift->GetYaxis()->SetTitleOffset(1.5);
 
+//triggered pre/post hits plots:
+TH1F* hTimeDiff_trig = new TH1F("hTimeDiff_trig","",660,0.,66000);
+TH1F* hTimeDiff_trigtrig = new TH1F("hTimeDiff_trigtrig","",660,0.,66000);
+TH1F* hEvDiff_trig = new TH1F("hEvDiff_trig","",7,-3.5,3.5);
+TH1F* hEvDiff_trigtrig = new TH1F("hEvDiff_trigtrig","",7,-3.5,3.5);
+
 //Energy plots:
 float xminE = 0.;
 //float xmaxE = 20000.;
@@ -189,6 +204,9 @@ float xmaxE = 24000.;
 int nbinsE = 480;
 TH1F* hE[nSDD]; // Calibrated energy spectrum
 TH1F* hE_trig[nSDD]; // Calibrated energy spectrum
+TH1F* hEpre1[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEpre5[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEpre10[nSDD]; // Calibrated energy spectrum of prehit
 TH1F* hE_trig_tdc_drift[nSDD]; // Calibrated energy spectrum
 TH2F* hEdrift_trig[nSDD]; // Calibrated energy spectrum
 bool SUMMED[nSDD] = {};
@@ -207,6 +225,9 @@ hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 for(int iSDD = 0;iSDD<nSDD;iSDD++){
  hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig[iSDD] = new TH1F(Form("hE%i_trig",iSDD),"",nbinsE,xminE,xmaxE);
+ hEpre1[iSDD] = new TH1F(Form("hEpre1_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEpre5[iSDD] = new TH1F(Form("hEpre5_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEpre10[iSDD] = new TH1F(Form("hEpre10_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig_tdc_drift[iSDD] = new TH1F(Form("hE%i_trig_tdc_drift",iSDD),"",nbinsE,xminE,xmaxE);
  hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,24000,200,-33000,-31000);
  hE[iSDD]->GetXaxis()->SetTitle("E (eV)");
@@ -468,12 +489,65 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
    hADC_trig[theSDD]->Fill(theADC);
    hdrift->Fill(drift[ihit]);
    hdrift_unzoom->Fill(drift[ihit]);
+
+   //now also for triggered spectra look at previous and post hits:
+   int iprehit,iposthit;
+   t1 = drift[ihit]+32768.;
+   nprehits = 0;
+   nposthits = 0;
+   for(int i=0;i<npre;i++){
+    iprehit=ihit-i-1;
+    iposthit=ihit+i+1;
+    if(ihit>i) {
+     if(sdd[iprehit]>0&&adc[iprehit]>0){
+      preSDDt[i]=sdd[iprehit];
+      preADCt[i]=adc[iprehit];
+      pretrig[i]=false;
+      if(trigg[iprehit]==1)pretrig[i]=true;
+      timediff = -99999.;
+      t2 = drift[iprehit]+32768.;
+      if(t1>t2) timediff = t1-t2;
+      if(t2>t1) timediff = t2-t1;
+      preTimeDifft[i]=timediff;
+      preEvDifft[i] = evnr[ihit] - evnr[iprehit];
+      nprehits++;
+     }
+    }
+    if(ihit<nhits-i) {
+     if(sdd[iposthit]>0&&adc[iposthit]>0){
+      postSDDt[i]=sdd[iposthit];
+      postADCt[i]=adc[iposthit];
+      posttrig[i]=false;
+      if(trigg[iposthit]==1)posttrig[i]=true;
+      timediff = -99999.;
+      t2 = drift[iposthit]+32768.;
+      if(t1>t2) timediff = t1-t2;
+      if(t2>t1) timediff = t2-t1;
+      postTimeDifft[i]=timediff;
+      postEvDifft[i] = evnr[ihit] - evnr[iposthit];
+      nposthits++;
+     }
+    }
+   }//npre/post hits loop
+  
+   if(preSDDt[0]>-1) hTimeDiff_trig->Fill(preTimeDifft[0]);
+   if(preSDDt[0]>-1 && pretrig[0]) hTimeDiff_trigtrig->Fill(preTimeDifft[0]);
+   if(preSDDt[0]>-1) hEvDiff_trig->Fill(preEvDifft[0]);
+   if(preSDDt[0]>-1 && posttrig[0]) hEvDiff_trigtrig->Fill(preEvDifft[0]);
+
+   //Sfera plots:
+   if(whichSfera[theSDD]>-1){
+    if(whichSfera[theSDD]==whichSfera[preSDDt[0]]){
+     hADCpre_trig[theSDD]->Fill(theADC,preADCt[0]);//same sfera
+    }
+   }
+
   }//end triggered hits
 
 
   //ENERGY PLOTS
   //------------
-  if(UseG0[theSDD]!=0&&UseG0[theSDD]!=0){//we have calib for this sdd
+  if(UseG0[theSDD]!=0&&UseG[theSDD]!=0){//we have calib for this sdd
    float theE = UseG0[theSDD]+UseG[theSDD]*theADC;
    float minG = 2.5;//range of accepted gain for the SDD to be summed
    float maxG = 4.;
@@ -494,11 +568,11 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
    }else{ // TRIGGERED:
     hE_trig[theSDD]->Fill(theE);
     hEdrift_trig[theSDD]->Fill(theE,drift[ihit]);
-    if(UseG[theSDD]>minG&&UseG[theSDD]<maxG){
+    if(UseG[theSDD]>minG&&UseG[theSDD]<maxG){//good cal
      hEsum_trig->Fill(theE);
-     if((ktrot>5880&&ktrot<5950)||(ktrot>6100&&ktrot<6170)){
+     if((ktrot>5880&&ktrot<5950)||(ktrot>6100&&ktrot<6170)){//good tdc
       hEsum_trig_tdc->Fill(theE);
- //   if((drift[ihit]>-32600&&drift[ihit]<-32400)){
+      //if((drift[ihit]>-32600&&drift[ihit]<-32400)){
       if((drift[ihit]>-32600&&drift[ihit]<-32375)){
        hEsum_trig_tdc_drift->Fill(theE);
        hE_trig_tdc_drift[theSDD]->Fill(theE);
@@ -506,6 +580,17 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
         hEsum_external_tdc_drift->Fill(theE);
        }else{
         hEsum_internal_tdc_drift->Fill(theE);
+       }
+      }
+      //pre/post energy spectra (for now, no drift time requirement)
+      for(int ipre=0;ipre<nprehits;ipre++){
+       if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
+        if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
+         float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
+         if(ipre==0) hEpre1[theSDD]->Fill(preE);
+         if(ipre<5) hEpre5[theSDD]->Fill(preE);
+         if(ipre<10) hEpre10[theSDD]->Fill(preE);
+        }
        }
       }
      }else{
@@ -603,8 +688,10 @@ float xmaxPeakFinder = 3900;
 int sigmaPeakFinder = 20; //sigma for peak Finder, in adc channels
 float InitThresholdPeakFinder = 0.01; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
 float InitTolerance = 0.02; // 5% -> Tolerance to check that peak assumption is correct
-Double_t *xpeaks;
-Double_t *ypeaks;
+//Double_t *xpeaks;
+//Double_t *ypeaks;
+float* xpeaks;
+float* ypeaks;
 float xadc[nPFPeaksMAX] ={};
 float yadc[nPFPeaksMAX] ={};
 float PFPeakE[nPFPeaks] ={};
@@ -739,6 +826,8 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
    printf("Found %d candidate peaks to fit\n",nfound);
    thresholdPeakFinder = thresholdPeakFinder*.1;//TSpectrum std=0.05. Change it til it finds the peaks
   }
+  //xpeaks = (Double_t*)spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
+  //ypeaks = (Double_t*)spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
   xpeaks = spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
   ypeaks = spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
 
@@ -1129,6 +1218,28 @@ hdrift_unzoom->Write();
 
 hEdrift->Write();
 
+hTimeDiff_trig->Write();
+hTimeDiff_trigtrig->Write();
+hEvDiff_trig->Write();
+hEvDiff_trigtrig->Write();
+
+//hADCpre_trig array:
+TObjArray* hADCpre_trigArray = new TObjArray();
+TObjArray* hEpre1_Array = new TObjArray();
+TObjArray* hEpre5_Array = new TObjArray();
+TObjArray* hEpre10_Array = new TObjArray();
+for(int iSDD=0;iSDD<nSDD;iSDD++){
+ if(writeSDD[iSDD]){
+  hADCpre_trigArray->Add(hADCpre_trig[iSDD]);
+  hEpre1_Array->Add(hEpre1[iSDD]);
+  hEpre5_Array->Add(hEpre5[iSDD]);
+  hEpre10_Array->Add(hEpre10[iSDD]);
+ }
+}
+hADCpre_trigArray->Write("hADCpre_trigArray",TObject::kSingleKey);
+hEpre1_Array->Write("hEpre1_Array",TObject::kSingleKey);
+hEpre5_Array->Write("hEpre5_Array",TObject::kSingleKey);
+hEpre10_Array->Write("hEpre10_Array",TObject::kSingleKey);
 
 fout->Close();
 
