@@ -65,6 +65,8 @@ TH2F* hADCpreBADevdiff[nSDD];
 TH2F* hADCpre_GOODev_GOODtime[nSDD];
 TH1F* hADCpre_GOODev_GOODtime1D[nSDD];
 TH1F* hADCgood[nSDD];//define a simple histo "good": crosstak checked only within sfera <--THIS IS THE FINAL OUTPUT
+TH1F* hADCtrigclean[nSDD];
+TH1F* hADCtrigclean_restricted[nSDD];
 TH2F* hADCpre_GOODev_BADtime[nSDD];
 TH2F* hADCpre_BADev_GOODtime[nSDD];
 TH2F* hADCpre_BADev_BADtime[nSDD];
@@ -89,6 +91,10 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
  hADCpre_GOODev_GOODtime1D[iSDD] = new TH1F(Form("ADC%i_GOODev_GOODtime1D",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
  hADCgood[iSDD] = new TH1F(Form("ADC%igood",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
  hADCgood[iSDD]->GetXaxis()->SetTitle("ADC");
+ hADCtrigclean[iSDD] = new TH1F(Form("ADC%itrigclean",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
+ hADCtrigclean[iSDD]->GetXaxis()->SetTitle("ADC");
+ hADCtrigclean_restricted[iSDD] = new TH1F(Form("ADC%itrigclean_restricted",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
+ hADCtrigclean_restricted[iSDD]->GetXaxis()->SetTitle("ADC");
  hADCpre_GOODev_BADtime[iSDD] = new TH2F(Form("ADC%i_GOODev_BADtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
  hADCpre_BADev_GOODtime[iSDD] = new TH2F(Form("ADC%i_BADev_GOODtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
  hADCpre_BADev_BADtime[iSDD] = new TH2F(Form("ADC%i_BADev_BADtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
@@ -203,10 +209,15 @@ float xminE = 0.;
 float xmaxE = 24000.;
 int nbinsE = 480;
 TH1F* hE[nSDD]; // Calibrated energy spectrum
+TH1F* hEtrigclean[nSDD]; // Calibrated energy spectrum
+TH1F* hEtrigclean_restricted[nSDD]; // Calibrated energy spectrum
 TH1F* hE_trig[nSDD]; // Calibrated energy spectrum
-TH1F* hEpre1[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEpre5[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEpre10[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost1[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost5[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost10[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost1_drift[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost5_drift[nSDD]; // Calibrated energy spectrum of prehit
+TH1F* hEprepost10_drift[nSDD]; // Calibrated energy spectrum of prehit
 TH1F* hE_trig_tdc_drift[nSDD]; // Calibrated energy spectrum
 TH2F* hEdrift_trig[nSDD]; // Calibrated energy spectrum
 bool SUMMED[nSDD] = {};
@@ -224,17 +235,30 @@ hEsumCP->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 for(int iSDD = 0;iSDD<nSDD;iSDD++){
  hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEtrigclean[iSDD] = new TH1F(Form("hE%itrigclean",iSDD),"",nbinsE,xminE,xmaxE);
+ hEtrigclean_restricted[iSDD] = new TH1F(Form("hE%itrigclean_restricted",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig[iSDD] = new TH1F(Form("hE%i_trig",iSDD),"",nbinsE,xminE,xmaxE);
- hEpre1[iSDD] = new TH1F(Form("hEpre1_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEpre5[iSDD] = new TH1F(Form("hEpre5_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEpre10[iSDD] = new TH1F(Form("hEpre10_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost1[iSDD] = new TH1F(Form("hEprepost1_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost5[iSDD] = new TH1F(Form("hEprepost5_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost10[iSDD] = new TH1F(Form("hEprepost10_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost1_drift[iSDD] = new TH1F(Form("hEprepost1_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost5_drift[iSDD] = new TH1F(Form("hEprepost5_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
+ hEprepost10_drift[iSDD] = new TH1F(Form("hEprepost10_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
  hE_trig_tdc_drift[iSDD] = new TH1F(Form("hE%i_trig_tdc_drift",iSDD),"",nbinsE,xminE,xmaxE);
  hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,24000,200,-33000,-31000);
  hE[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEtrigclean[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEtrigclean_restricted[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hE_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hE_trig_tdc_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hEdrift_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
  hEdrift_trig[iSDD]->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+ hEprepost1[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEprepost5[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEprepost10[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEprepost1_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEprepost5_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
+ hEprepost10_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
 }
 TH1F* hEsum_trig_tdc = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc");hEsum_trig_tdc->SetName("hEsum_trig_tdc");
 TH1F* hEsum_trig_tdc_drift = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc_drift");hEsum_trig_tdc_drift->SetName("hEsum_trig_tdc_drift");
@@ -387,6 +411,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
   // non-triggered SPECTRA:
   //-----------------------
   bool histoit=false;
+  bool histoit_restricted=false;
   if(trigg[ihit]!=1){
 
    //get pre hits:
@@ -542,6 +567,27 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
     }
    }
 
+   //try to get a clean (crosstalk removed) histo as well for triggered:
+   histoit = false;
+   histoit_restricted = false;
+   if(preSDDt[0]>-1){
+    ISGOODevdiff = true;
+    if(preEvDifft[0]==0) ISGOODevdiff=false;
+    ISGOODtime = true;
+    if(preTimeDifft[0]>0.&&preTimeDifft[0]<620.) ISGOODtime = false;//std 5microseconds
+    if(whichSfera[theSDD]>-1){
+     if(whichSfera[theSDD]==whichSfera[preSDD]){//same sfera, check if it is crosstalk:
+      if(ISGOODtime&&ISGOODevdiff) histoit = true;
+     }else{//different sfera, just histo it:
+      histoit=true;
+      histoit_restricted=true;
+     }
+    }
+    if(histoit) hADCtrigclean[theSDD]->Fill(theADC);
+    if(histoit_restricted) hADCtrigclean_restricted[theSDD]->Fill(theADC);
+   }
+
+
   }//end triggered hits
 
 
@@ -576,23 +622,45 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
       if((drift[ihit]>-32600&&drift[ihit]<-32375)){
        hEsum_trig_tdc_drift->Fill(theE);
        hE_trig_tdc_drift[theSDD]->Fill(theE);
+       if(histoit) hEtrigclean[theSDD]->Fill(theE);
+       if(histoit_restricted) hEtrigclean_restricted[theSDD]->Fill(theE);
        if((theSDD)<33){
         hEsum_external_tdc_drift->Fill(theE);
        }else{
         hEsum_internal_tdc_drift->Fill(theE);
        }
       }
-      //pre/post energy spectra (for now, no drift time requirement)
+      //pre/post energy spectra 
       for(int ipre=0;ipre<nprehits;ipre++){
        if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
         if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
          float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
-         if(ipre==0) hEpre1[theSDD]->Fill(preE);
-         if(ipre<5) hEpre5[theSDD]->Fill(preE);
-         if(ipre<10) hEpre10[theSDD]->Fill(preE);
+         if(ipre==0) hEprepost1[theSDD]->Fill(preE);///these plots with NO drift time req
+         if(ipre<5) hEprepost5[theSDD]->Fill(preE);
+         if(ipre<10) hEprepost10[theSDD]->Fill(preE);
+         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
+          if(ipre==0) hEprepost1_drift[theSDD]->Fill(preE);
+          if(ipre<5) hEprepost5_drift[theSDD]->Fill(preE);
+          if(ipre<10) hEprepost10_drift[theSDD]->Fill(preE);
+         }
         }
        }
-      }
+      }//pre hits
+      for(int ipost=0;ipost<nposthits;ipost++){
+       if(UseG0[postSDDt[ipost]]!=0&&UseG[postSDDt[ipost]]!=0){//we have calib for this sdd
+        if(UseG[postSDDt[ipost]]>minG&&UseG[postSDDt[ipost]]<maxG){//the cal is good
+         float postE = UseG0[postSDDt[ipost]]+UseG[postSDDt[ipost]]*postADCt[ipost];
+         if(ipost==0) hEprepost1[theSDD]->Fill(postE);///these plots with NO drift time req
+         if(ipost<5) hEprepost5[theSDD]->Fill(postE);
+         if(ipost<10) hEprepost10[theSDD]->Fill(postE);
+         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
+          if(ipost==0) hEprepost1_drift[theSDD]->Fill(postE);
+          if(ipost<5) hEprepost5_drift[theSDD]->Fill(postE);
+          if(ipost<10) hEprepost10_drift[theSDD]->Fill(postE);
+         }
+        }
+       }
+      }//post hits
      }else{
       hEsum_trig_mip->Fill(theE);
       if((drift[ihit]>-32400)){
@@ -1225,21 +1293,46 @@ hEvDiff_trigtrig->Write();
 
 //hADCpre_trig array:
 TObjArray* hADCpre_trigArray = new TObjArray();
-TObjArray* hEpre1_Array = new TObjArray();
-TObjArray* hEpre5_Array = new TObjArray();
-TObjArray* hEpre10_Array = new TObjArray();
+TObjArray* hEprepost1_Array = new TObjArray();
+TObjArray* hEprepost5_Array = new TObjArray();
+TObjArray* hEprepost10_Array = new TObjArray();
+TObjArray* hEprepost1_drift_Array = new TObjArray();
+TObjArray* hEprepost5_drift_Array = new TObjArray();
+TObjArray* hEprepost10_drift_Array = new TObjArray();
 for(int iSDD=0;iSDD<nSDD;iSDD++){
  if(writeSDD[iSDD]){
   hADCpre_trigArray->Add(hADCpre_trig[iSDD]);
-  hEpre1_Array->Add(hEpre1[iSDD]);
-  hEpre5_Array->Add(hEpre5[iSDD]);
-  hEpre10_Array->Add(hEpre10[iSDD]);
+  hEprepost1_Array->Add(hEprepost1[iSDD]);
+  hEprepost5_Array->Add(hEprepost5[iSDD]);
+  hEprepost10_Array->Add(hEprepost10[iSDD]);
+  hEprepost1_drift_Array->Add(hEprepost1_drift[iSDD]);
+  hEprepost5_drift_Array->Add(hEprepost5_drift[iSDD]);
+  hEprepost10_drift_Array->Add(hEprepost10_drift[iSDD]);
  }
 }
 hADCpre_trigArray->Write("hADCpre_trigArray",TObject::kSingleKey);
-hEpre1_Array->Write("hEpre1_Array",TObject::kSingleKey);
-hEpre5_Array->Write("hEpre5_Array",TObject::kSingleKey);
-hEpre10_Array->Write("hEpre10_Array",TObject::kSingleKey);
+hEprepost1_drift_Array->Write("hEprepost1_drift_Array",TObject::kSingleKey);
+hEprepost5_drift_Array->Write("hEprepost5_drift_Array",TObject::kSingleKey);
+hEprepost10_drift_Array->Write("hEprepost10_drift_Array",TObject::kSingleKey);
+
+
+//clean trigger (cross-talk removed) plots
+TObjArray* hADCtrigclean_Array = new TObjArray();
+TObjArray* hADCtrigclean_restricted_Array = new TObjArray();
+TObjArray* hEtrigclean_Array = new TObjArray();
+TObjArray* hEtrigclean_restricted_Array = new TObjArray();
+for(int iSDD=0;iSDD<nSDD;iSDD++){
+ if(writeSDD[iSDD]){
+  hADCtrigclean_Array->Add(hADCtrigclean[iSDD]);
+  hADCtrigclean_restricted_Array->Add(hADCtrigclean_restricted[iSDD]);
+  hEtrigclean_Array->Add(hEtrigclean[iSDD]);
+  hEtrigclean_restricted_Array->Add(hEtrigclean_restricted[iSDD]);
+ }
+}
+hADCtrigclean_Array->Write("hADCtrigclean_Array",TObject::kSingleKey);
+hADCtrigclean_restricted_Array->Write("hADCtrigclean_restricted_Array",TObject::kSingleKey);
+hEtrigclean_Array->Write("hEtrigclean_Array",TObject::kSingleKey);
+hEtrigclean_restricted_Array->Write("hEtrigclean_restricted_Array",TObject::kSingleKey);
 
 fout->Close();
 
