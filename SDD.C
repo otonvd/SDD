@@ -390,6 +390,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  //NEW from intergration of kaon trigger:
  if(InjectionFlag==1&&dum>=0) continue;
  if(InjectionFlag==0&&dum<0) continue;
+ if(InjectionFlag==0&&CP==0) continue;//by DIANA, if InjectionFlag==0, analize only collision events
 
  //kaon trigger plots:
  hktwide->Fill(kt[0]+kt[1],kt[1]+kt[2]);
