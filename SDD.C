@@ -1311,6 +1311,9 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
  }
 }
 hADCpre_trigArray->Write("hADCpre_trigArray",TObject::kSingleKey);
+hEprepost1_Array->Write("hEprepost1_Array",TObject::kSingleKey);
+hEprepost5_Array->Write("hEprepost5_Array",TObject::kSingleKey);
+hEprepost10_Array->Write("hEprepost10_Array",TObject::kSingleKey);
 hEprepost1_drift_Array->Write("hEprepost1_drift_Array",TObject::kSingleKey);
 hEprepost5_drift_Array->Write("hEprepost5_drift_Array",TObject::kSingleKey);
 hEprepost10_drift_Array->Write("hEprepost10_drift_Array",TObject::kSingleKey);
