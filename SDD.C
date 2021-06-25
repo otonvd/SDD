@@ -16,7 +16,6 @@
 
 void SDD::Loop(Int_t InjectionFlag){
 
-//testforgit
 // --- Define histograms and stuff --- //
 //______________________________________________________________________________________________________//
 
