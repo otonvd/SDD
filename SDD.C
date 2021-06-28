@@ -235,6 +235,10 @@ hEsumCP->GetXaxis()->SetTitle("E (eV)");
 hEsumCP_trig->GetXaxis()->SetTitle("E (eV)");
 hEsumCP->GetYaxis()->SetTitle("ie*ip (mA^{2})");
 hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
+
+TH1F* hEsum_trig_peak = (TH1F*) hEsum_trig->Clone("hEsum_trig_peak");
+TH1F* hEsum_trig_flat = (TH1F*) hEsum_trig->Clone("hEsum_trig_flat");
+
 for(int iSDD = 0;iSDD<nSDD;iSDD++){
  hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
  hEtrigclean[iSDD] = new TH1F(Form("hE%itrigclean",iSDD),"",nbinsE,xminE,xmaxE);
@@ -625,10 +629,17 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
     hEdrift_trig[theSDD]->Fill(theE,drift[ihit]);
     if(UseG[theSDD]>minG&&UseG[theSDD]<maxG){//good cal
      hEsum_trig->Fill(theE);
+
+     bool DriftPeak = false;
+     float tmin = -32600;//define drift time window
+     float tmax = -32375;//define drift time window
+     if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true;
+
+     if(DriftPeak) hEsum_trig_peak->Fill(theE);
+     if(!DriftPeak) hEsum_trig_flat->Fill(theE);
      if((ktrot>5880&&ktrot<5950)||(ktrot>6100&&ktrot<6170)){//good tdc
       hEsum_trig_tdc->Fill(theE);
-      //if((drift[ihit]>-32600&&drift[ihit]<-32400)){
-      if((drift[ihit]>-32600&&drift[ihit]<-32375)){
+      if(DriftPeak){
        hEsum_trig_tdc_drift->Fill(theE);
        hE_trig_tdc_drift[theSDD]->Fill(theE);
        if(histoit) hEtrigclean[theSDD]->Fill(theE);
@@ -1290,6 +1301,8 @@ hEarray_drift->Write("hEarray_drift",TObject::kSingleKey);
 
 hEsum->Write();
 hEsum_trig->Write();
+hEsum_trig_peak->Write();
+hEsum_trig_flat->Write();
 hEsum_trig_tdc->Write();
 hEsum_trig_tdc_drift->Write();
 hEsum_trig_mip->Write();
