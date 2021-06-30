@@ -19,8 +19,6 @@ void SDD::Loop(Int_t InjectionFlag){
 // --- Define histograms and stuff --- //
 //______________________________________________________________________________________________________//
 
-// TEST DIANA
-// ANOTHER TEST DIANA  
 const int nSDD = 65; //last SDD #64
 bool writeSDD[nSDD] = {};
 bool goodcalSDD[nSDD] = {};
@@ -843,10 +841,10 @@ float xmaxPeakFinder = 3900;
 int sigmaPeakFinder = 20; //sigma for peak Finder, in adc channels
 float InitThresholdPeakFinder = 0.01; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
 float InitTolerance = 0.02; // 5% -> Tolerance to check that peak assumption is correct
-//Double_t *xpeaks;
-//Double_t *ypeaks;
-float* xpeaks;
-float* ypeaks;
+Double_t *xpeaks;
+Double_t *ypeaks;
+//float* xpeaks;
+//float* ypeaks;
 float xadc[nPFPeaksMAX] ={};
 float yadc[nPFPeaksMAX] ={};
 float PFPeakE[nPFPeaks] ={};
