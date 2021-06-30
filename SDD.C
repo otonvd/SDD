@@ -283,6 +283,18 @@ TH1F* hEsum_internal = (TH1F*)hEsum->Clone("hEsum_internal");hEsum_internal->Set
 TH1F* hEsum_external_tdc_drift = (TH1F*)hEsum->Clone("hEsum_external_tdc_drift");hEsum_external_tdc_drift->SetName("hEsum_external_tdc_drift");
 TH1F* hEsum_internal_tdc_drift = (TH1F*)hEsum->Clone("hEsum_internal_tdc_drift");hEsum_internal_tdc_drift->SetName("hEsum_internal_tdc_drift");
 
+TH1F* hKAONShits = new TH1F("hKAONShits","",600,0,6000);
+TH1F* hMIPShits = new TH1F("hMIPShits","",600,0,6000);
+TH1F* hKAONStriggerhits = new TH1F("hKAONStriggerhits","",10,0,10);
+TH1F* hMIPStriggerhits = new TH1F("hMIPStriggerhits","",10,0,10);
+
+TH1F* htrigMIPShitsE = new TH1F("hMIPShitsE","",nSDD,0,nSDD);
+TH1F* htrigMIPShitsEall = new TH1F("hMIPShitsEall","",nSDD,0,nSDD);
+TH1F* htrigKAONShitsE = new TH1F("hKAONShitsE","",nSDD,0,nSDD);
+TH1F* htrigKAONShitsEall = new TH1F("hKAONShitsEall","",nSDD,0,nSDD);
+TH1F* htrigKAONShitsE_drift = new TH1F("hKAONShitsE_drift","",nSDD,0,nSDD);
+TH1F* htrigKAONShitsEall_drift = new TH1F("hKAONShitsEall_drift","",nSDD,0,nSDD);
+
 
 //get calibration if available:
 float UseG0[nSDD] = {};
@@ -326,8 +338,9 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  nb = fChain->GetEntry(jentry);   nbytes += nb;
  // if (Cut(ientry) < 0) continue;
 
+ // !!! SKIP LOOP if nhits == 0  !!!!
  if(nhits<1) {
-  cout<<"SKIP ENTRY "<<jentry<<" WITH nhits="<<nhits<<endl;
+  //cout<<"SKIP ENTRY "<<jentry<<" WITH nhits="<<nhits<<endl;
   continue;
  }
 
@@ -411,10 +424,18 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  hkt->Fill(kt[0]+kt[1],kt[1]+kt[2]);
  float ktrot = cos(PI/4)*(kt[0]+kt[1])+sin(PI/4)*(kt[2]+kt[3]);//x axis of 90deg rotation
  hktrot->Fill(ktrot);
-
+ //DEFINE HERE GOOD TDC:
+ bool TDCkaons = false;
+ if((ktrot>5880&&ktrot<5960)||(ktrot>6100&&ktrot<6180)) TDCkaons =true;
+ if(TDCkaons){
+  hKAONShits->Fill(nhits);
+ }else{
+  hMIPShits->Fill(nhits);
+ }
 
  // --- HITS LOOP --- //
  //-------------------//
+ int ntrig = 0;// number of trigger hits
  for (int ihit = 0;ihit<nhits;ihit++){
 
   //get adc and sdd:
@@ -428,7 +449,6 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
   bool histoit=false;
   bool histoit_restricted=false;
   if(trigg[ihit]!=1){
-
    //get pre hits:
    //-------------
    preSDD = -1; if(ihit>0) preSDD=sdd[ihit-1];
@@ -526,6 +546,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
   //TRIGGERED hits ADC 
   //------------------
   }else{ //  if(trigg[ihit]!=1)
+   ntrig++;
    hADC_trig[theSDD]->Fill(theADC);
    hdrift->Fill(drift[ihit]);
    hdrift_unzoom->Fill(drift[ihit]);
@@ -637,9 +658,27 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
      float tmax = -32375;//define drift time window
      if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true;
 
+     //count hits:
+     bool goodE = false;
+     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) ) goodE = true;
+     bool goodEall = false;
+     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) || (theE>18000&&theE<24000) ) goodEall = true;
+     if(TDCkaons){
+      if(goodE) htrigKAONShitsE->Fill(theSDD);
+      if(goodEall) htrigKAONShitsEall->Fill(theSDD);
+      if(DriftPeak){
+       if(goodE) htrigKAONShitsE_drift->Fill(theSDD);
+       if(goodEall) htrigKAONShitsEall_drift->Fill(theSDD);
+      }
+     }else{
+      if(goodE) htrigMIPShitsE->Fill(theSDD);
+      if(goodEall) htrigMIPShitsEall->Fill(theSDD);
+     }
+
+
      if(DriftPeak) hEsum_trig_peak->Fill(theE);
      if(!DriftPeak) hEsum_trig_flat->Fill(theE);
-     if((ktrot>5880&&ktrot<5950)||(ktrot>6100&&ktrot<6170)){//good tdc
+     if(TDCkaons){//good tdc
       hEsum_trig_tdc->Fill(theE);
       if(DriftPeak){
        hEsum_trig_tdc_drift->Fill(theE);
@@ -719,6 +758,11 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
 
 
  }//end ihit loop
+ if(TDCkaons){
+  hKAONStriggerhits->Fill(ntrig);
+ }else{
+  hMIPStriggerhits->Fill(ntrig);
+ }
 }//end entries loop
 
 //CPtime plot:
@@ -1390,6 +1434,18 @@ hADCtrigclean_Array->Write("hADCtrigclean_Array",TObject::kSingleKey);
 hADCtrigclean_restricted_Array->Write("hADCtrigclean_restricted_Array",TObject::kSingleKey);
 hEtrigclean_Array->Write("hEtrigclean_Array",TObject::kSingleKey);
 hEtrigclean_restricted_Array->Write("hEtrigclean_restricted_Array",TObject::kSingleKey);
+
+hKAONShits->Write();
+hMIPShits->Write();
+hKAONStriggerhits->Write();
+hMIPStriggerhits->Write();
+
+htrigMIPShitsE->Write();
+htrigMIPShitsEall->Write();
+htrigKAONShitsE->Write();
+htrigKAONShitsEall->Write();
+htrigKAONShitsE_drift->Write();
+htrigKAONShitsEall_drift->Write();
 
 fout->Close();
 
