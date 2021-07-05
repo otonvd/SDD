@@ -1,10 +1,26 @@
 //#include "SDD.h"
 
-void run(char *filein ="20210530_2240_0607_0821_summ_all_wrong_degr.root",char *filecalib="foutSDD_20210601_0113_0601_0930_20kV_100uA_xray_beams.root")
-{ 
+
+
+//void run(char *filein ="sum_wrong_degr_empty_20210530_2240_20210607_1005.root",char *filecalib="foutSDD_20210601_0113_0601_0930_20kV_100uA_xray_beams.root"){ // EMPTY target WRONG degrader
+//void run(char *filein ="sum_degr_rot1_empty_20210607_2149_20210609_1146.root",char *filecalib="foutSDD_20210601_0113_0601_0930_20kV_100uA_xray_beams.root"){ // EMPTY target REVERSE degrader
+//void run(char *filein ="sum_nodegr_empty_20210609_2037_20210615_0856.root",char *filecalib="foutSDD_20210601_0113_0601_0930_20kV_100uA_xray_beams.root"){ // EMPTY target NO degrader
+//void run(char *filein ="sum_degr2_empty_20210615_1831_20210621_0758.root",char *filecalib="foutSDD_20210601_0113_0601_0930_20kV_100uA_xray_beams.root"){ // EMPTY target DEG2 degrader
+
+//void run(char *filein ="he1_degnumber2.root",char *filecalib="foutSDD_20210624_1622_0624_1806_xray_20kv_100ua.root"){ //he first part, deg#2
+void run(char *filein ="he2_degrotnumber1.root",char *filecalib="foutSDD_20210624_1622_0624_1806_xray_20kv_100ua.root"){ //he second part, degrot#1, current
+
+	
+
+
+
+
+
+
+
+
+	
 //gSystem->AddIncludePath("-I. -I$ROOTSYS/include -I$ALICE_ROOT -I$ALICE_ROOT/include -I$ALICE_PHYSICS/include");
-
-
 //gSystem->Load("SDD_C.so");
 R__LOAD_LIBRARY(SDD_C);
 

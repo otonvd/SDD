@@ -1,6 +1,6 @@
 //#include "SDD.h"
 
-void runCalib(char *filein ="20210531_1652_0531_2227_20kV_100uA_xray_beams.root", int quick = 0)
+void runCalib(char *filein ="20210624_1622_0624_1806_xray_20kv_100ua.root", int quick = 0)
 { 
 //cout<<gSystem->GetIncludePath()<<endl;
 //gSystem->AddIncludePath("-I. -I$ROOTSYS/include -I$ALICE_ROOT -I$ALICE_ROOT/include -I$ALICE_PHYSICS/include");

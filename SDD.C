@@ -141,8 +141,11 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
 
 //define other variables
 int preSDD,preADC,postSDD,postADC,theSDD,theADC,timediff,evdiff,t1,t2,iepbin,ratebin,iep,CPbin,oldCPbin;
-int oldbuffertime,olddate;
+int oldbuffertime,olddate,oldnhits,oldntrig;
+bool oldlastistrig = false;
+oldntrig = 0;
 olddate = 0;
+oldnhits = 0;
 oldCPbin = 0;
 float CP;
 bool ISGOODtime,ISGOODevdiff;
@@ -176,6 +179,16 @@ TH2F* rate_c = new TH2F("rate_c","",100,0,2000.,100,0.,200);
 bool activeSDD[nSDD] = {};
 int NactiveSDD = 0;
 
+//histos to check trigger acquistion
+TH1F* hnhits_trig = new TH1F("hnhits_trig","",7000,0,7000);
+TH1F* hnhits_notrig = new TH1F("hnhits_notrig","",7000,0,7000);
+TH1F* hnhits_trig2 = new TH1F("hnhits_trig2","",7000,0,7000);
+TH1F* hnhits_notrig2 = new TH1F("hnhits_notrig2","",7000,0,7000);
+TH1F* hseconds_trig = new TH1F("hseconds_trig","",20,0,20);
+TH1F* hseconds_notrig = new TH1F("hseconds_notrig","",20,0,20);
+TH1F* hseconds_trig2 = new TH1F("hseconds_trig2","",20,0,20);
+TH1F* hseconds_notrig2 = new TH1F("hseconds_notrig2","",20,0,20);
+
 //kaon trigger plots:
 TH2F* hktwide = new TH2F("hktwide","",100,0,8000,100,0,8000);
 TH2F* hkt = new TH2F("hkt","",1500,3500,5000,1500,3500,5000);
@@ -190,6 +203,8 @@ TH1F* hdrift = new TH1F("hdrift","",1000,-33000,-31000);
 TH1F* hdrift_unzoom = new TH1F("hdrift_unzoom","",2000,-33000,33000);
 hdrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 hdrift_unzoom->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+TH1F* hdrift_kaons = (TH1F*) hdrift->Clone("hdrift_kaons");
+TH1F* hdrift_mips = (TH1F*) hdrift->Clone("hdrift_mips");
 
 TH2F* hEdrift = new TH2F("hEdrift","",200,0,24000,200,-33000,-31000);
 hEdrift->GetXaxis()->SetTitle("E (eV)");
@@ -206,7 +221,7 @@ TH1F* hEvDiff_trigtrig = new TH1F("hEvDiff_trigtrig","",7,-3.5,3.5);
 float xminE = 0.;
 //float xmaxE = 20000.;
 float xmaxE = 24000.;
-int nbinsE = 480;
+int nbinsE = 1200;
 TH1F* hE[nSDD]; // Calibrated energy spectrum
 TH1F* hEtrigclean[nSDD]; // Calibrated energy spectrum
 TH1F* hEtrigclean_restricted[nSDD]; // Calibrated energy spectrum
@@ -280,9 +295,11 @@ TH1F* hEsum_external = (TH1F*)hEsum->Clone("hEsum_external");hEsum_external->Set
 TH1F* hEsum_internal = (TH1F*)hEsum->Clone("hEsum_internal");hEsum_internal->SetName("hEsum_internal");
 TH1F* hEsum_external_tdc_drift = (TH1F*)hEsum->Clone("hEsum_external_tdc_drift");hEsum_external_tdc_drift->SetName("hEsum_external_tdc_drift");
 TH1F* hEsum_internal_tdc_drift = (TH1F*)hEsum->Clone("hEsum_internal_tdc_drift");hEsum_internal_tdc_drift->SetName("hEsum_internal_tdc_drift");
+TH1F* hEsum_UP_tdc_drift = (TH1F*)hEsum->Clone("hEsum_UP_tdc_drift");
+TH1F* hEsum_DOWN_tdc_drift = (TH1F*)hEsum->Clone("hEsum_DOWN_tdc_drift");
 
-TH1F* hKAONShits = new TH1F("hKAONShits","",600,0,6000);
-TH1F* hMIPShits = new TH1F("hMIPShits","",600,0,6000);
+TH1F* hKAONShits = new TH1F("hKAONShits","",6000,0,6000);
+TH1F* hMIPShits = new TH1F("hMIPShits","",6000,0,6000);
 TH1F* hKAONStriggerhits = new TH1F("hKAONStriggerhits","",10,0,10);
 TH1F* hMIPStriggerhits = new TH1F("hMIPStriggerhits","",10,0,10);
 
@@ -339,7 +356,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  // !!! SKIP LOOP if nhits == 0  !!!!
  if(nhits<1) {
   //cout<<"SKIP ENTRY "<<jentry<<" WITH nhits="<<nhits<<endl;
-  continue;
+  //continue;
  }
 
 
@@ -375,34 +392,41 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
 
  //get current:
  //-------------
-  iep = ie+ip;
-  iepbin = (int)iep/100;
-  if(iep>=1500) iepbin = 15;
-  CP = ie*ip;//current product
-  CPbin = CP/10000; // 50 bins up to 500e3
-  if(CP>500e3)CPbin=50;
-  //if(!(CPtime[CPbin].size()>0&&CPtime[CPbin].at(CPtime[CPbin].size()-1)==date)) CPtime[CPbin].push_back(date);//old method, WRONG
-  if(jentry>0){
-   oldbuffertime = date-olddate;
-   hBuffertime->Fill(oldbuffertime);
-   //CPtime[oldCPbin] += oldbuffertime;
-   //now add injection rejection flag:
-   if(InjectionFlag==2) {
-    CPtime[oldCPbin] += oldbuffertime;
-   } else {
-    if(InjectionFlag==1&&dum==1) CPtime[oldCPbin] += oldbuffertime;
-    if(InjectionFlag==0&&dum==0) CPtime[oldCPbin] += oldbuffertime;
-   }
+ iep = ie+ip;
+ iepbin = (int)iep/100;
+ if(iep>=1500) iepbin = 15;
+ CP = ie*ip;//current product
+ CPbin = CP/10000; // 50 bins up to 500e3
+ if(CP>500e3)CPbin=50;
+ //if(!(CPtime[CPbin].size()>0&&CPtime[CPbin].at(CPtime[CPbin].size()-1)==date)) CPtime[CPbin].push_back(date);//old method, WRONG
+ if(jentry>0){
+  oldbuffertime = date-olddate;
+  if(oldntrig>0) hseconds_trig->Fill(oldbuffertime);
+  if(oldntrig==0) hseconds_notrig->Fill(oldbuffertime);
+  if(oldlastistrig) hseconds_trig2->Fill(oldbuffertime);
+  if(!oldlastistrig) hseconds_notrig2->Fill(oldbuffertime);
+  hBuffertime->Fill(oldbuffertime);
+  //CPtime[oldCPbin] += oldbuffertime;
+  //now add injection rejection flag:
+  if(InjectionFlag==2) {
+   CPtime[oldCPbin] += oldbuffertime;
+  } else {
+   if(InjectionFlag==1&&dum==1) CPtime[oldCPbin] += oldbuffertime;
+   if(InjectionFlag==0&&dum==0) CPtime[oldCPbin] += oldbuffertime;
   }
-  //cout<<" CPbin "<<CPbin<<" oldCPbin "<<oldCPbin<<" oldbuffertime "<<oldbuffertime<<" CPtime[oldCPbin] "<<CPtime[oldCPbin]<<endl;
-  oldCPbin = CPbin;//save CPbin for the next buffer
-  olddate = date;//save the date ;)
-  if(jentry==nentries-1){ //last buffer
-   CPtime[oldCPbin] += 10;//put a generic time of 10s for the last buffer
-  }
+ }
+ //cout<<" CPbin "<<CPbin<<" oldCPbin "<<oldCPbin<<" oldbuffertime "<<oldbuffertime<<" CPtime[oldCPbin] "<<CPtime[oldCPbin]<<endl;
+ oldCPbin = CPbin;//save CPbin for the next buffer
+ olddate = date;//save the date ;)
+ oldnhits = nhits;//save the hits
+ oldlastistrig = false;
+ if(trigg[nhits-1]==1) oldlastistrig = true;
+ if(jentry==nentries-1){ //last buffer
+  CPtime[oldCPbin] += 10;//put a generic time of 10s for the last buffer
+ }
 
-  //rate vs current plot
-  if(rate>0.) rate_c->Fill(iep,rate);
+ //rate vs current plot
+ if(rate>0.) rate_c->Fill(iep,rate);
 
  //Analyze events with injection?? 
  //===============================
@@ -424,7 +448,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  hktrot->Fill(ktrot);
  //DEFINE HERE GOOD TDC:
  bool TDCkaons = false;
- if((ktrot>5880&&ktrot<5960)||(ktrot>6100&&ktrot<6180)) TDCkaons =true;
+ if((ktrot>5880&&ktrot<5960)||(ktrot>6100&&ktrot<6200)) TDCkaons =true;
  if(TDCkaons){
   hKAONShits->Fill(nhits);
  }else{
@@ -652,7 +676,7 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
      hEsum_trig->Fill(theE);
 
      bool DriftPeak = false;
-     float tmin = -32600;//define drift time window
+     float tmin = -32580;//define drift time window
      float tmax = -32375;//define drift time window
      if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true;
 
@@ -668,9 +692,11 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
        if(goodE) htrigKAONShitsE_drift->Fill(theSDD);
        if(goodEall) htrigKAONShitsEall_drift->Fill(theSDD);
       }
+      hdrift_kaons->Fill(drift[ihit]);
      }else{
       if(goodE) htrigMIPShitsE->Fill(theSDD);
       if(goodEall) htrigMIPShitsEall->Fill(theSDD);
+      hdrift_mips->Fill(drift[ihit]);
      }
 
 
@@ -687,6 +713,12 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
         hEsum_external_tdc_drift->Fill(theE);
        }else{
         hEsum_internal_tdc_drift->Fill(theE);
+       }
+       if((theSDD>=9&&theSDD<=16)||(theSDD>=25&&theSDD<=32) 
+       ||(theSDD>=41&&theSDD<=48)||(theSDD>=57&&theSDD<=64)){
+        hEsum_UP_tdc_drift->Fill(theE);
+       }else{
+        hEsum_DOWN_tdc_drift->Fill(theE);
        }
       }
       //pre/post energy spectra 
@@ -754,13 +786,18 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
   }//we have calib
 
 
-
  }//end ihit loop
+
  if(TDCkaons){
   hKAONStriggerhits->Fill(ntrig);
  }else{
   hMIPStriggerhits->Fill(ntrig);
  }
+ if(ntrig>0) hnhits_trig->Fill(nhits);
+ if(ntrig==0) hnhits_notrig->Fill(nhits);
+ if(trigg[nhits-1]==1) hnhits_trig2->Fill(nhits);
+ if(trigg[nhits-1]!=1) hnhits_notrig2->Fill(nhits);
+ oldntrig = ntrig;
 }//end entries loop
 
 //CPtime plot:
@@ -838,6 +875,10 @@ const int nPFPeaksMAX = 13;//number of MAX peaks for peak finder
 const int nPFPeaks = 3;//number DESIRED of peaks for peak finder
 float xminPeakFinder = 1600;// Region of peak finding
 float xmaxPeakFinder = 3900;
+//Ad hoc calib for last siddhartino He run:
+//for sdd 45 xmaxPeakFinder=3300;
+//for sdd 50 xmaxPeakFinder=3600;
+//....and why SDD 41 is not calibrated?
 int sigmaPeakFinder = 20; //sigma for peak Finder, in adc channels
 float InitThresholdPeakFinder = 0.01; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
 float InitTolerance = 0.02; // 5% -> Tolerance to check that peak assumption is correct
@@ -969,7 +1010,15 @@ for(int iSDD=0;iSDD<nSDD;iSDD++){
   cout<<endl<<endl<<"-----PEAK FINDER for SDD "<<iSDD<<" with entries "<<thehisto->GetEntries()<<endl;
   
   //restrict to PeakFinder area:
+float xmaxPeakFinder_save = xmaxPeakFinder;
+//Ad hoc calib for last siddhartino He run:
+//for sdd 45 xmaxPeakFinder=3300;
+//for sdd 50 xmaxPeakFinder=3600;
+//....and why SDD 41 is not calibrated?
+if(iSDD==45) xmaxPeakFinder=3300.;
+if(iSDD==50) xmaxPeakFinder=3600.;
   thehisto->GetXaxis()->SetRangeUser(xminPeakFinder,xmaxPeakFinder);
+xmaxPeakFinder = xmaxPeakFinder_save;
 
   //peak finder config:
   Int_t nfound = 0;
@@ -1206,6 +1255,14 @@ cout<<endl<<" NICELY CALIBRATED SDD's = "<<NgoodCal<<endl<<endl;
 //______________________________________________________________________________________________________//
 TFile* fout = new TFile(sfileout,"RECREATE");
 
+hnhits_trig->Write();
+hnhits_notrig->Write();
+hnhits_trig2->Write();
+hnhits_notrig2->Write();
+hseconds_trig->Write();
+hseconds_notrig->Write();
+hseconds_trig2->Write();
+hseconds_notrig2->Write();
 
 for(int iSDD=0;iSDD<nSDD;iSDD++){
  if(writeSDD[iSDD]){
@@ -1355,6 +1412,8 @@ hEsum_external->Write();
 hEsum_internal->Write();
 hEsum_external_tdc_drift->Write();
 hEsum_internal_tdc_drift->Write();
+hEsum_UP_tdc_drift->Write();
+hEsum_DOWN_tdc_drift->Write();
 
 htotalSDDsummed->Fill(isummed);
 cout<<isummed<<" summed sdd's"<<endl;
@@ -1370,6 +1429,8 @@ hkt->Write();
 hktrot->Write();
 hdrift->Write();
 hdrift_unzoom->Write();
+hdrift_kaons->Write();
+hdrift_mips->Write();
 
 hEdrift->Write();
 
