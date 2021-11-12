@@ -2,6 +2,7 @@
 #include "SDD.h"
 #include <TRandom3.h>
 #include <TH2.h>
+#include <THStack.h>
 #include <TF1.h>
 #include <TGraphErrors.h>
 #include <TCutG.h>
@@ -16,99 +17,111 @@
 
 void SDD::Loop(Int_t InjectionFlag){
 //see how you handle this
-// --- Define histograms and stuff --- //
-//______________________________________________________________________________________________________//
 
-const int nSDD = 65; //last SDD #64
-bool writeSDD[nSDD] = {};
-bool goodcalSDD[nSDD] = {};
-int WriteIfHits = 999;//write SDD (and calib) if at least 1k hits 
+
+// --- HISTO BOOKING AND GLoBAL STUFF  --- //
+//______________________________________________________________________________________________//
+
+//ADC histo booking
 int nbinsadc = 8000;
 int minadc = 0.;
 int maxadc = 8000.;
-
-//plain adc spectra
-TH1F* hADC[nSDD];
-TH1F* hADC_trig[nSDD];
-
-//event number diff:
-TH1F* hEvDiff[nSDD];
-
-//time diff:
-TH1F* hTimeDiff[nSDD];
-
-//set all defined histograms:
-for(int iSDD=0;iSDD<nSDD;iSDD++){
-  hADC[iSDD] = new TH1F(Form("ADC%i",iSDD),"",nbinsadc,minadc,maxadc);
-  hADC_trig[iSDD] = new TH1F(Form("ADC%i_trig",iSDD),"",nbinsadc,minadc,maxadc);
-  hADC[iSDD]->GetXaxis()->SetTitle("ADC");
-  hADC_trig[iSDD]->GetXaxis()->SetTitle("ADC");
-  hEvDiff[iSDD] = new TH1F(Form("EvDiff%i",iSDD),"",4,-1.5,2.5);
-  hTimeDiff[iSDD] = new TH1F(Form("TimeDiff%i",iSDD),"",10000,0.,66000);
-}
-
-//2D histograms
-//-------------
-int rebinfactor = 20;
-nbinsadc = nbinsadc/rebinfactor;//rebin for 2D histos
-
-//ADC
-TH2F* hADCpre[nSDD];
-TH2F* hADCpre_trig[nSDD];
-//TH2F* hADCpre_[nSDD][nSDD];
-TH2F* hADCpre_[nSDD][nSDD+2];//+2 to add two histos: InSfera, NotInSfera
-TH2F* hADCpreBADtime[nSDD];
-TH2F* hADCpreGOODtime[nSDD];
-TH2F* hADCpreGOODevdiff[nSDD];
-TH2F* hADCpreBADevdiff[nSDD];
-TH2F* hADCpre_GOODev_GOODtime[nSDD];
-TH1F* hADCpre_GOODev_GOODtime1D[nSDD];
-TH1F* hADCgood[nSDD];//define a simple histo "good": crosstak checked only within sfera <--THIS IS THE FINAL OUTPUT
-TH1F* hADCtrigclean[nSDD];
-TH1F* hADCtrigclean_restricted[nSDD];
-TH2F* hADCpre_GOODev_BADtime[nSDD];
-TH2F* hADCpre_BADev_GOODtime[nSDD];
-TH2F* hADCpre_BADev_BADtime[nSDD];
-TH2F* hADCgoodCurrent[nSDD]; 
-TH2F* hADCgoodCurrent2[nSDD]; 
-TH2F* hADCgoodRate[nSDD]; 
-TH2F* hADCgoodRate2[nSDD]; 
-TH1F* hADCgoodZeroCurrent[nSDD]; 
-TH1F* hADCgoodWithCurrent[nSDD]; 
-
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- hADCpre[iSDD] = new TH2F(Form("ADCpre%i",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_trig[iSDD] = new TH2F(Form("ADCpre%i_trig",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- for(int jSDD=0;jSDD<nSDD;jSDD++){
-  hADCpre_[iSDD][jSDD] = new TH2F(Form("ADC%i_pre%i",iSDD,jSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
+ //rebin:
+ int rebinFactor = 8;
+ nbinsadc = nbinsadc/rebinFactor;
+TH1F* hADC[nBUS][nSDD];
+TH2F* hADCpre[nBUS][nSDD];
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ for(int iSDD=0;iSDD<nSDD;iSDD++){
+  hADC[iBUS][iSDD] = new TH1F(Form("ADC_%i_%i",iBUS,iSDD),"",nbinsadc,minadc,maxadc);
+  hADC[iBUS][iSDD]->GetXaxis()->SetTitle("ADC");
+  hADC[iBUS][iSDD]->SetLineColor(2);
+  hADC[iBUS][iSDD]->SetLineWidth(2);
+  hADCpre[iBUS][iSDD] 
+   = new TH2F(Form("ADCpre_%i_%i",iBUS,iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
+  hADCpre[iBUS][iSDD]->GetXaxis()->SetTitle("ADC");
+  hADCpre[iBUS][iSDD]->GetYaxis()->SetTitle("ADC previous hit");
  }
- hADCpreGOODtime[iSDD] = new TH2F(Form("ADC%i_GOODtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpreBADtime[iSDD] = new TH2F(Form("ADC%i_BADtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpreGOODevdiff[iSDD] = new TH2F(Form("ADC%i_GOODev",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpreBADevdiff[iSDD] = new TH2F(Form("ADC%i_BADev",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_GOODev_GOODtime[iSDD] = new TH2F(Form("ADC%i_GOODev_GOODtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_GOODev_GOODtime1D[iSDD] = new TH1F(Form("ADC%i_GOODev_GOODtime1D",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- hADCgood[iSDD] = new TH1F(Form("ADC%igood",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- hADCgood[iSDD]->GetXaxis()->SetTitle("ADC");
- hADCtrigclean[iSDD] = new TH1F(Form("ADC%itrigclean",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- hADCtrigclean[iSDD]->GetXaxis()->SetTitle("ADC");
- hADCtrigclean_restricted[iSDD] = new TH1F(Form("ADC%itrigclean_restricted",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- hADCtrigclean_restricted[iSDD]->GetXaxis()->SetTitle("ADC");
- hADCpre_GOODev_BADtime[iSDD] = new TH2F(Form("ADC%i_GOODev_BADtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_BADev_GOODtime[iSDD] = new TH2F(Form("ADC%i_BADev_GOODtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_BADev_BADtime[iSDD] = new TH2F(Form("ADC%i_BADev_BADtime",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- //current dependent
- hADCgoodCurrent[iSDD] = new TH2F(Form("ADC%igoodCurrent",iSDD),"",nbinsadc,minadc,maxadc,15,0,15);
- hADCgoodCurrent2[iSDD] = new TH2F(Form("ADC%igoodCurrent2",iSDD),"",nbinsadc,minadc,maxadc,150,0.,1500.);
- hADCgoodZeroCurrent[iSDD] = new TH1F(Form("ADC%igoodZeroCurrent",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- hADCgoodWithCurrent[iSDD] = new TH1F(Form("ADC%igoodWithCurrent",iSDD),"",nbinsadc*rebinfactor,minadc,maxadc);
- //rate dependent:
- hADCgoodRate[iSDD] = new TH2F(Form("ADC%igoodRate",iSDD),"",nbinsadc,minadc,maxadc,10,0,10);
- hADCgoodRate2[iSDD] = new TH2F(Form("ADC%igoodRate2",iSDD),"",nbinsadc,minadc,maxadc,100,0.,100.);
 }
 
-//Sferas histos:
-//-------------
+TH1F* hADCtrig[nBUS][nSDD];
+TH1F* hADCgood[nBUS][nSDD];
+TH2F* hADCpreGOOD[nBUS][nSDD];
+TH2F* hADCpreBAD[nBUS][nSDD];
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ for(int iSDD=0;iSDD<nSDD;iSDD++){
+  hADCtrig[iBUS][iSDD]=(TH1F*)hADC[iBUS][iSDD]->Clone(Form("ADCtrig_%i_%i",iBUS,iSDD));
+  hADCgood[iBUS][iSDD]=(TH1F*)hADC[iBUS][iSDD]->Clone(Form("ADCgood_%i_%i",iBUS,iSDD));
+  hADCgood[iBUS][iSDD]->SetLineColor(4);
+  hADCpreGOOD[iBUS][iSDD]=(TH2F*)hADCpre[iBUS][iSDD]->Clone(Form("ADCpreGOOD_%i_%i",iBUS,iSDD));
+  hADCpreBAD[iBUS][iSDD]=(TH2F*)hADCpre[iBUS][iSDD]->Clone(Form("ADCpreBAD_%i_%i",iBUS,iSDD));
+ }
+}
+
+//ADC arrays:
+const int MaxArrays = 100;
+int nArrADC = 0;
+TObjArray* ArrADC[MaxArrays];
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADC");nArrADC++;    //same order here...
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADCpre");nArrADC++;
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADCpreGOOD");nArrADC++;
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADCpreBAD");nArrADC++;
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADCtrig");nArrADC++;
+ArrADC[nArrADC]=new TObjArray();ArrADC[nArrADC]->SetName("ADCgood");nArrADC++;
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ for(int iSDD=0;iSDD<nSDD;iSDD++){
+  int iarr =0;
+  ArrADC[iarr]->Add(hADC[iBUS][iSDD]);iarr++;                                 //... and here
+  ArrADC[iarr]->Add(hADCpre[iBUS][iSDD]);iarr++;
+  ArrADC[iarr]->Add(hADCpreGOOD[iBUS][iSDD]);iarr++;
+  ArrADC[iarr]->Add(hADCpreBAD[iBUS][iSDD]);iarr++;
+  ArrADC[iarr]->Add(hADCtrig[iBUS][iSDD]);iarr++;
+  ArrADC[iarr]->Add(hADCgood[iBUS][iSDD]);iarr++;
+ }
+}
+
+
+//Kaon trigger plots:
+TH2F* hktwide = new TH2F("hktwide","",100,0,8000,100,0,8000);
+TH2F* hkt = new TH2F("hkt","",1500,3500,5000,1500,3500,5000);
+TH1F* hktrot = new TH1F("hktrot","",1000,5500,6500);
+ hktwide->GetXaxis()->SetTitle("TDC1+TDC2");
+ hktwide->GetYaxis()->SetTitle("TDC3+TDC4");
+ hkt->GetXaxis()->SetTitle("TDC1+TDC2");
+ hkt->GetYaxis()->SetTitle("TDC3+TDC4");
+ hktrot->GetXaxis()->SetTitle("rotated TDC");
+TH1F* hKAONhits = new TH1F("hKAONhits","",6000,0,6000);
+TH1F* hMIPhits = new TH1F("hMIPhits","",6000,0,6000);
+TH1F* hKAONtriggerhits = new TH1F("hKAONtriggerhits","",10,0,10);
+TH1F* hMIPtriggerhits = new TH1F("hMIPtriggerhits","",10,0,10);
+TH1F* hDrift = new TH1F("hDrift","",1000,-33000,-31000);
+TH1F* hDriftUnzoom = new TH1F("hDriftUnzoom","",2000,-33000,33000);
+ hDrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+ hDriftUnzoom->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+//Kaon trigger array:
+int nArrKT = 0;
+TObjArray* ArrKT;ArrKT =new TObjArray();ArrKT->SetName("KaonTrigger");
+ArrKT->Add(hktwide);
+ArrKT->Add(hkt);
+ArrKT->Add(hktrot);
+ArrKT->Add(hKAONhits);
+ArrKT->Add(hMIPhits);
+ArrKT->Add(hKAONtriggerhits);
+ArrKT->Add(hMIPtriggerhits);
+ArrKT->Add(hDrift);
+ArrKT->Add(hDriftUnzoom);
+
+
+//some variables definitions
+int preSDD,preADC,postSDD,postADC,theSDD,theADC,timediff,evdiff,t1,t2,iepbin,ratebin;
+int iep,CPbin,oldCPbin,theBUS,preBUS;
+float CP;
+float PI = 3.14159265359;
+bool ISGOODtimediff,ISGOODevdiff,IsGOOD;
+
+
+//Sferas definition:
+//------------------
 // 4 Sferas for file  20210209_0831_0209_1243_xray_25kv_100ua.root
 // according to https://agenda.infn.it/event/25043/contributions/126916/attachments/78848/102558/17Feb_SIDD_DAFNE.pdf
 int nSferas = 4;
@@ -128,219 +141,19 @@ nSferas++;
 firstSDD[nSferas] = 49;
 lastSDD[nSferas] = 64;
 nSferas++;
-int whichSfera[nSDD] = {-1};//THIS IS A BUG!
+int whichSfera[nSDD];
 for(int iSfera=0;iSfera<nSferas;iSfera++){
  for(int iSDD=firstSDD[iSfera];iSDD<=lastSDD[iSfera];iSDD++){
   whichSfera[iSDD] = iSfera;
  }
 }
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- hADCpre_[iSDD][nSDD] = new TH2F(Form("ADC%i_preInSfera",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
- hADCpre_[iSDD][nSDD+1] = new TH2F(Form("ADC%i_preNotInSfera",iSDD),"",nbinsadc,minadc,maxadc,nbinsadc,minadc,maxadc);
-}
-
-//define other variables
-int preSDD,preADC,postSDD,postADC,theSDD,theADC,timediff,evdiff,t1,t2,iepbin,ratebin,iep,CPbin,oldCPbin;
-int oldbuffertime,olddate,oldnhits,oldntrig;
-bool oldlastistrig = false;
-oldntrig = 0;
-olddate = 0;
-oldnhits = 0;
-oldCPbin = 0;
-float CP;
-bool ISGOODtime,ISGOODevdiff;
-int rmin,rmax,totmin;
-float PI = 3.14159265359;
-const int npre = 10;
-int preSDDt[npre] = {};
-int preADCt[npre] = {};
-bool pretrig[npre] = {};
-int postSDDt[npre] = {};
-int postADCt[npre] = {};
-bool posttrig[npre] = {};
-int preTimeDifft[npre] = {};
-int postTimeDifft[npre] = {};
-int preEvDifft[npre] = {};
-int postEvDifft[npre] = {};
-int nprehits =0;
-int nposthits =0;
-
-//vectors and deques for rate and current calculation
-deque<int> rate_nhits;
-deque<int> rate_date;
-const int CPnbins = 50;
-//vector<int> CPtime[CPnbins];//old method, WRONG
-int CPtime[CPnbins] = {};
-TH1F* hCPtime = new TH1F("hCPtime","",CPnbins,0.,(float)CPnbins);
-TH1F* hBuffertime = new TH1F("hBuffertime","",100,0.,100.);
-uint rate_depth = 10; //use last 10 buffers to calculate rate
-float rate = 0.;
-TH2F* rate_c = new TH2F("rate_c","",100,0,2000.,100,0.,200);
-bool activeSDD[nSDD] = {};
-int NactiveSDD = 0;
-
-//histos to check trigger acquistion
-TH1F* hnhits_trig = new TH1F("hnhits_trig","",7000,0,7000);
-TH1F* hnhits_notrig = new TH1F("hnhits_notrig","",7000,0,7000);
-TH1F* hnhits_trig2 = new TH1F("hnhits_trig2","",7000,0,7000);
-TH1F* hnhits_notrig2 = new TH1F("hnhits_notrig2","",7000,0,7000);
-TH1F* hseconds_trig = new TH1F("hseconds_trig","",20,0,20);
-TH1F* hseconds_notrig = new TH1F("hseconds_notrig","",20,0,20);
-TH1F* hseconds_trig2 = new TH1F("hseconds_trig2","",20,0,20);
-TH1F* hseconds_notrig2 = new TH1F("hseconds_notrig2","",20,0,20);
-
-//kaon trigger plots:
-TH2F* hktwide = new TH2F("hktwide","",100,0,8000,100,0,8000);
-TH2F* hkt = new TH2F("hkt","",1500,3500,5000,1500,3500,5000);
-TH1F* hktrot = new TH1F("hktrot","",1000,5500,6500);
-hktwide->GetXaxis()->SetTitle("TDC1+TDC2");
-hktwide->GetYaxis()->SetTitle("TDC3+TDC4");
-hkt->GetXaxis()->SetTitle("TDC1+TDC2");
-hkt->GetYaxis()->SetTitle("TDC3+TDC4");
-hktrot->GetXaxis()->SetTitle("rotated TDC");
-
-TH1F* hdrift = new TH1F("hdrift","",1000,-33000,-31000);
-TH1F* hdrift_unzoom = new TH1F("hdrift_unzoom","",2000,-33000,33000);
-hdrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
-hdrift_unzoom->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
-TH1F* hdrift_kaons = (TH1F*) hdrift->Clone("hdrift_kaons");
-TH1F* hdrift_mips = (TH1F*) hdrift->Clone("hdrift_mips");
-
-TH2F* hEdrift = new TH2F("hEdrift","",200,0,24000,200,-33000,-31000);
-hEdrift->GetXaxis()->SetTitle("E (eV)");
-hEdrift->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
-hEdrift->GetYaxis()->SetTitleOffset(1.5);
-
-//triggered pre/post hits plots:
-TH1F* hTimeDiff_trig = new TH1F("hTimeDiff_trig","",660,0.,66000);
-TH1F* hTimeDiff_trigtrig = new TH1F("hTimeDiff_trigtrig","",660,0.,66000);
-TH1F* hEvDiff_trig = new TH1F("hEvDiff_trig","",7,-3.5,3.5);
-TH1F* hEvDiff_trigtrig = new TH1F("hEvDiff_trigtrig","",7,-3.5,3.5);
-
-//Energy plots:
-float xminE = 0.;
-//float xmaxE = 20000.;
-float xmaxE = 24000.;
-int nbinsE = 1200;
-TH1F* hE[nSDD]; // Calibrated energy spectrum
-TH1F* hEtrigclean[nSDD]; // Calibrated energy spectrum
-TH1F* hEtrigclean_restricted[nSDD]; // Calibrated energy spectrum
-TH1F* hE_trig[nSDD]; // Calibrated energy spectrum
-TH1F* hEprepost1[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost5[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost10[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost1_drift[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost5_drift[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost10_drift[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost1_mips[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost5_mips[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hEprepost10_mips[nSDD]; // Calibrated energy spectrum of prehit
-TH1F* hE_trig_tdc_drift[nSDD]; // Calibrated energy spectrum
-TH2F* hEdrift_trig[nSDD]; // Calibrated energy spectrum
-bool SUMMED[nSDD] = {};
-float xminCP = 0.;
-float xmaxCP = 500e3;
-TH1F* hEsum = new TH1F("hEsum","",nbinsE,xminE,xmaxE);
-TH1F* hEsum_trig = new TH1F("hEsum_trig","",nbinsE,xminE,xmaxE);
-TH2F* hEsumCP = new TH2F("hEsumCP","",nbinsE/10,xminE,xmaxE,CPnbins,xminCP,xmaxCP);// CP is product of currents
-TH2F* hEsumCP_trig = new TH2F("hEsumCP_trig","",nbinsE/10,xminE,xmaxE,CPnbins,xminCP,xmaxCP);// CP is product of currents
-hEsum->GetXaxis()->SetTitle("E (eV)");
-hEsum_trig->GetXaxis()->SetTitle("E (eV)");
-hEsumCP->GetXaxis()->SetTitle("E (eV)");
-hEsumCP_trig->GetXaxis()->SetTitle("E (eV)");
-hEsumCP->GetYaxis()->SetTitle("ie*ip (mA^{2})");
-hEsumCP_trig->GetYaxis()->SetTitle("ie*ip (mA^{2})");
-
-TH1F* hEsum_trig_peak = (TH1F*) hEsum_trig->Clone("hEsum_trig_peak");
-TH1F* hEsum_trig_flat = (TH1F*) hEsum_trig->Clone("hEsum_trig_flat");
-
-for(int iSDD = 0;iSDD<nSDD;iSDD++){
- hE[iSDD] = new TH1F(Form("hE%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEtrigclean[iSDD] = new TH1F(Form("hE%itrigclean",iSDD),"",nbinsE,xminE,xmaxE);
- hEtrigclean_restricted[iSDD] = new TH1F(Form("hE%itrigclean_restricted",iSDD),"",nbinsE,xminE,xmaxE);
- hE_trig[iSDD] = new TH1F(Form("hE%i_trig",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost1[iSDD] = new TH1F(Form("hEprepost1_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost5[iSDD] = new TH1F(Form("hEprepost5_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost10[iSDD] = new TH1F(Form("hEprepost10_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost1_drift[iSDD] = new TH1F(Form("hEprepost1_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost5_drift[iSDD] = new TH1F(Form("hEprepost5_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost10_drift[iSDD] = new TH1F(Form("hEprepost10_drift_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost1_mips[iSDD] = new TH1F(Form("hEprepost1_mips_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost5_mips[iSDD] = new TH1F(Form("hEprepost5_mips_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hEprepost10_mips[iSDD] = new TH1F(Form("hEprepost10_mips_sdd%i",iSDD),"",nbinsE,xminE,xmaxE);
- hE_trig_tdc_drift[iSDD] = new TH1F(Form("hE%i_trig_tdc_drift",iSDD),"",nbinsE,xminE,xmaxE);
- hEdrift_trig[iSDD] = new TH2F(Form("hEdrift%i_trig",iSDD),"",200,0,24000,200,-33000,-31000);
- hE[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEtrigclean[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEtrigclean_restricted[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hE_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hE_trig_tdc_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEdrift_trig[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEdrift_trig[iSDD]->GetYaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
- hEprepost1[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost5[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost10[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost1_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost5_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost10_drift[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost1_mips[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost5_mips[iSDD]->GetXaxis()->SetTitle("E (eV)");
- hEprepost10_mips[iSDD]->GetXaxis()->SetTitle("E (eV)");
-}
-TH1F* hEsum_trig_tdc = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc");hEsum_trig_tdc->SetName("hEsum_trig_tdc");
-TH1F* hEsum_trig_tdc_drift = (TH1F*)hEsum_trig->Clone("hEsum_trig_tdc_drift");hEsum_trig_tdc_drift->SetName("hEsum_trig_tdc_drift");
-TH1F* hEsum_trig_mip = (TH1F*)hEsum_trig->Clone("hEsum_trig_mip");hEsum_trig_mip->SetName("hEsum_trig_mip");
-TH1F* hEsum_trig_mip_nodrift = (TH1F*)hEsum_trig->Clone("hEsum_trig_mip_nodrift");hEsum_trig_mip_nodrift->SetName("hEsum_trig_mip_nodrift");
-TH1F* hEsum_external = (TH1F*)hEsum->Clone("hEsum_external");hEsum_external->SetName("hEsum_external");
-TH1F* hEsum_internal = (TH1F*)hEsum->Clone("hEsum_internal");hEsum_internal->SetName("hEsum_internal");
-TH1F* hEsum_external_tdc_drift = (TH1F*)hEsum->Clone("hEsum_external_tdc_drift");hEsum_external_tdc_drift->SetName("hEsum_external_tdc_drift");
-TH1F* hEsum_internal_tdc_drift = (TH1F*)hEsum->Clone("hEsum_internal_tdc_drift");hEsum_internal_tdc_drift->SetName("hEsum_internal_tdc_drift");
-TH1F* hEsum_UP_tdc_drift = (TH1F*)hEsum->Clone("hEsum_UP_tdc_drift");
-TH1F* hEsum_DOWN_tdc_drift = (TH1F*)hEsum->Clone("hEsum_DOWN_tdc_drift");
-
-TH1F* hKAONShits = new TH1F("hKAONShits","",6000,0,6000);
-TH1F* hMIPShits = new TH1F("hMIPShits","",6000,0,6000);
-TH1F* hKAONStriggerhits = new TH1F("hKAONStriggerhits","",10,0,10);
-TH1F* hMIPStriggerhits = new TH1F("hMIPStriggerhits","",10,0,10);
-
-TH1F* htrigMIPShitsE = new TH1F("hMIPShitsE","",nSDD,0,nSDD);
-TH1F* htrigMIPShitsEall = new TH1F("hMIPShitsEall","",nSDD,0,nSDD);
-TH1F* htrigKAONShitsE = new TH1F("hKAONShitsE","",nSDD,0,nSDD);
-TH1F* htrigKAONShitsEall = new TH1F("hKAONShitsEall","",nSDD,0,nSDD);
-TH1F* htrigKAONShitsE_drift = new TH1F("hKAONShitsE_drift","",nSDD,0,nSDD);
-TH1F* htrigKAONShitsEall_drift = new TH1F("hKAONShitsEall_drift","",nSDD,0,nSDD);
 
 
-//get calibration if available:
-float UseG0[nSDD] = {};
-float UseG[nSDD] = {};
-if(CalibArray->GetEntries()>0){ //DO WE HAVE A CALIBRATION LOADED?
- cout<<" Using Calibration with "<<CalibArray->GetEntries()<<" SDD's calibrated"<<endl;
- TF1* fcal;
- char* fnamechar;
- TString sfname;
- for(int j=0;j<CalibArray->GetEntries();j++){  // loop over calibrated SDDs:
-  fcal = (TF1*) CalibArray->At(j); //take function from array:
-  sfname = (TString) fcal->GetName();
-  int iSDD=99999;
-  if(sfname.Contains("PreCal")){//calib is from Pre-Cal with format "fPreCalXX"
-   TString sfnumber(sfname(7,8));
-   iSDD=sfnumber.Atoi();
-  }else if(sfname.Contains("PeakFinder")){//calib is from PeakFinder with format "fPeakFinderXX"
-   TString sfnumber(sfname(11,12));
-   iSDD=sfnumber.Atoi();
-  }
-  UseG0[iSDD] =fcal->GetParameter(0);
-  UseG[iSDD] =fcal->GetParameter(1);
-  fcal->Delete();
- }
-}
-//calib loaded
 
 
 
 // --- MAIN BUFFERS LOOP --- //
-//______________________________________________________________________________________________________//
+//______________________________________________________________________________________________//
 
 if (fChain == 0) return;
 Long64_t nentries = fChain->GetEntriesFast();
@@ -360,35 +173,8 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  }
 
 
- //calculate rate
- //--------------
- //cout<<"-----------------------"<<endl;
- //cout<<" EVENT "<<jentry<<"  nhits "<<nhits<<" date "<<date<<endl;
- NactiveSDD=0;
- for(int iSDD=0;iSDD<nSDD;iSDD++){
-  if(activeSDD[iSDD]) NactiveSDD++; //NactiveSDD is given by the previous buffer! :/
-  activeSDD[iSDD] = false;
- }
- rate = 0.;
- rate_nhits.push_back(nhits);
- rate_date.push_back(date);
- //cout<<" buffer size after filling "<<rate_nhits.size()<<endl;
- if(rate_nhits.size()==rate_depth){
-  for(uint ibus=0;ibus<rate_nhits.size();ibus++){
-   rate += rate_nhits.at(ibus);
-   //cout<<"    "<<ibus<<" adding "<<rate_nhits.at(ibus)<<"  sum="<<rate<<endl;
-  }
-  //cout<<" first time "<<rate_date.at(0)<<endl;
-  //cout<<" last time "<<rate_date.at(rate_nhits.size()-1)<<endl;
-  //cout<<" total seconds "<<rate_date.at(rate_nhits.size()-1) - rate_date.at(0)<<endl;
-  rate = rate / (rate_date.at(rate_nhits.size()-1) - rate_date.at(0)) / NactiveSDD ;
-  rate_nhits.pop_front();//remove first component
-  rate_date.pop_front();//remove first component
- }
- //cout<<" final buffer size "<<rate_nhits.size()<<endl;
- //cout<<"rate="<<rate<<endl;
- ratebin = (int)rate/10;
- if(rate>=100) ratebin = 10;
+ // --- EVENT RELATED STUFF --- //
+ //-------------------------------//
 
  //get current:
  //-------------
@@ -398,421 +184,111 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  CP = ie*ip;//current product
  CPbin = CP/10000; // 50 bins up to 500e3
  if(CP>500e3)CPbin=50;
- //if(!(CPtime[CPbin].size()>0&&CPtime[CPbin].at(CPtime[CPbin].size()-1)==date)) CPtime[CPbin].push_back(date);//old method, WRONG
- if(jentry>0){
-  oldbuffertime = date-olddate;
-  if(oldntrig>0) hseconds_trig->Fill(oldbuffertime);
-  if(oldntrig==0) hseconds_notrig->Fill(oldbuffertime);
-  if(oldlastistrig) hseconds_trig2->Fill(oldbuffertime);
-  if(!oldlastistrig) hseconds_notrig2->Fill(oldbuffertime);
-  hBuffertime->Fill(oldbuffertime);
-  //CPtime[oldCPbin] += oldbuffertime;
-  //now add injection rejection flag:
-  if(InjectionFlag==2) {
-   CPtime[oldCPbin] += oldbuffertime;
-  } else {
-   if(InjectionFlag==1&&dum==1) CPtime[oldCPbin] += oldbuffertime;
-   if(InjectionFlag==0&&dum==0) CPtime[oldCPbin] += oldbuffertime;
-  }
- }
- //cout<<" CPbin "<<CPbin<<" oldCPbin "<<oldCPbin<<" oldbuffertime "<<oldbuffertime<<" CPtime[oldCPbin] "<<CPtime[oldCPbin]<<endl;
- oldCPbin = CPbin;//save CPbin for the next buffer
- olddate = date;//save the date ;)
- oldnhits = nhits;//save the hits
- oldlastistrig = false;
- if(trigg[nhits-1]==1) oldlastistrig = true;
- if(jentry==nentries-1){ //last buffer
-  CPtime[oldCPbin] += 10;//put a generic time of 10s for the last buffer
- }
-
- //rate vs current plot
- if(rate>0.) rate_c->Fill(iep,rate);
 
  //Analyze events with injection?? 
  //===============================
  //InjectionFlag == 2   => Analyze all events
  //InjectionFlag == 1   => Analyze only INJECTION EVENTS
  //InjectionFlag == 0   => Analyze only NOT-INJECTION EVENTS
- //  OLD: in raw data the flag is dum, dum == 0 means no injection, dum ==1 means injection
- //  OLD: if(InjectionFlag==1&&dum!=1) continue;
- //  OLD: if(InjectionFlag==0&&dum!=0) continue;
- //NEW from intergration of kaon trigger:
- if(InjectionFlag==1&&dum>=0) continue;
- if(InjectionFlag==0&&dum<0) continue;
- if(InjectionFlag==0&&CP==0) continue;//by DIANA, if InjectionFlag==0, analize only collision events
+ if(InjectionFlag==1&&dum>=0)continue;
+ if(InjectionFlag==0&&dum<0)continue;
+ if(InjectionFlag==0&&CP==0)continue;//by DIANA, if InjectionFlag==0 analize only collision events
 
  //kaon trigger plots:
  hktwide->Fill(kt[0]+kt[1],kt[1]+kt[2]);
  hkt->Fill(kt[0]+kt[1],kt[1]+kt[2]);
  float ktrot = cos(PI/4)*(kt[0]+kt[1])+sin(PI/4)*(kt[2]+kt[3]);//x axis of 90deg rotation
  hktrot->Fill(ktrot);
- //DEFINE HERE GOOD TDC:
+
+ //DEFINE HERE TDC WINDOW:
+ //=======================
  bool TDCkaons = false;
  if((ktrot>5880&&ktrot<5960)||(ktrot>6100&&ktrot<6200)) TDCkaons =true;
  if(TDCkaons){
-  hKAONShits->Fill(nhits);
+  hKAONhits->Fill(nhits);
  }else{
-  hMIPShits->Fill(nhits);
+  hMIPhits->Fill(nhits);
  }
 
  // --- HITS LOOP --- //
  //-------------------//
+
  int ntrig = 0;// number of trigger hits
  for (int ihit = 0;ihit<nhits;ihit++){
 
-  //get adc and sdd:
+  //get bus, sdd and adc:
+  theBUS=bus[ihit];
   theADC=adc[ihit];
   theSDD=sdd[ihit];
-  activeSDD[theSDD]=true;
+  //get pre hits:
+  //-------------
+  preBUS = -1; if(ihit>0) preBUS=bus[ihit-1];
+  preSDD = -1; if(ihit>0) preSDD=sdd[ihit-1];
+  preADC = -1; if(ihit>0) preADC=adc[ihit-1];
+  
+  //SKIP FOR NOW EVENTS WITH NO "PRE" HIT !!!!!
+  if(preADC>0){
 
+   //get event diff:
+   //---------------
+   evdiff =-1;if(ihit>0) evdiff = evnr[ihit] - evnr[ihit-1];
 
-  // non-triggered SPECTRA:
-  //-----------------------
-  bool histoit=false;
-  bool histoit_restricted=false;
-  if(trigg[ihit]!=1){
-   //get pre hits:
+   //get time diff
    //-------------
-   preSDD = -1; if(ihit>0) preSDD=sdd[ihit-1];
-   preADC = -1; if(ihit>0) preADC=adc[ihit-1];
-   //preSDD = -1; if(ihit<nhits-1) preSDD=sdd[ihit+1]; // QUICK DIRTY TRY WITH POST
-   //preADC = -1; if(ihit<nhits-1) preADC=adc[ihit+1]; // QUICK DIRTY TRY WITH POST
-   //preSDD = -1; if(ihit>1) preSDD=sdd[ihit-2];//just to check previous previous hit
-   //preADC = -1; if(ihit>1) preADC=adc[ihit-2];//just to check previous previous hit
-
-   //get post hits:
-   postSDD = -1; if(ihit<nhits-1) postSDD=sdd[ihit+1];
-   postADC = -1; if(ihit<nhits-1) postADC=adc[ihit+1];
-   //postSDD = -1; if(ihit<nhits-2) postSDD=sdd[ihit+2];//just to check post post hit
-   //postADC = -1; if(ihit<nhits-2) postADC=adc[ihit+2];//just to check post post hit
-
-   //SKIP FOR NOW EVENTS WITH NO "PRE" HIT !!!!!
-   if(preADC>0){
-
-    //get event diff:
-    //---------------
-    evdiff =-1;if(ihit>0) evdiff = evnr[ihit] - evnr[ihit-1];
-
-    //get time diff
-    //-------------
-    timediff = -99999.;
-    t1 = drift[ihit]+32768.;
-    t2 = drift[ihit-1]+32768.;
-    if(t1>t2) timediff = t1-t2;
-    //if(t2>t1) timediff = t1+(32768.*2)-t2;
-    if(t2>t1) timediff = t2-t1;
-
-    //Decide if IS GOOD based in time/event_number:
-    //---------------------------------------------
-    ISGOODevdiff = true;
-    if(evdiff==0) ISGOODevdiff=false; 
-    ISGOODtime = true;
-    if(timediff>0.&&timediff<620.) ISGOODtime = false;//std 5microseconds
-    //if(timediff>0.&&timediff<4000.) ISGOODtime = false;//test ~20microseconds
-
-    //ADC plots
-    //---------
-    hADC[theSDD]->Fill(theADC);
-    hADCpre[theSDD]->Fill(theADC,preADC);
-    hADCpre_[theSDD][preSDD]->Fill(theADC,preADC);
-    if(ISGOODtime) hADCpreGOODtime[theSDD]->Fill(theADC,preADC);
-    if(!ISGOODtime) hADCpreBADtime[theSDD]->Fill(theADC,preADC);
-    if(ISGOODevdiff) hADCpreGOODevdiff[theSDD]->Fill(theADC,preADC);
-    if(!ISGOODevdiff) hADCpreBADevdiff[theSDD]->Fill(theADC,preADC);
-    if(ISGOODtime&&ISGOODevdiff) hADCpre_GOODev_GOODtime[theSDD]->Fill(theADC,preADC);
-    if(ISGOODtime&&ISGOODevdiff) hADCpre_GOODev_GOODtime1D[theSDD]->Fill(theADC);
-    if(!ISGOODtime&&ISGOODevdiff) hADCpre_GOODev_BADtime[theSDD]->Fill(theADC,preADC);
-    if(ISGOODtime&&!ISGOODevdiff) hADCpre_BADev_GOODtime[theSDD]->Fill(theADC,preADC);
-    if(!ISGOODtime&&!ISGOODevdiff) hADCpre_BADev_BADtime[theSDD]->Fill(theADC,preADC);
-
-    //histogram it?
-    if(whichSfera[theSDD]>-1){
-     if(whichSfera[theSDD]==whichSfera[preSDD]){//same sfera, check if it is crosstalk:
-      if(ISGOODtime&&ISGOODevdiff) histoit = true;
-     }else{//different sfera, just histo it:
-      histoit=true;
-     }
-    }
-
-    //ADC-current plots:
-    //------------------
-    if(histoit){
-     hADCgood[theSDD]->Fill(theADC);//simple good histo
-     //if(ISGOODtime&&ISGOODevdiff)hADCgood[theSDD]->Fill(theADC);//simple good histo
-     hADCgoodCurrent[theSDD]->Fill(theADC,iepbin);//simple good histo
-     hADCgoodCurrent2[theSDD]->Fill(theADC,iep);//simple good histo
-     hADCgoodRate[theSDD]->Fill(theADC,ratebin);//simple good histo
-     hADCgoodRate2[theSDD]->Fill(theADC,rate);//simple good histo
-     if(iep<=0)hADCgoodZeroCurrent[theSDD]->Fill(theADC);//simple good histo
-     if(iep>0)hADCgoodWithCurrent[theSDD]->Fill(theADC);//simple good histo
-    }
-  
-    //Sfera plots:
-    if(whichSfera[theSDD]>-1){
-     if(whichSfera[theSDD]==whichSfera[preSDD]){
-      hADCpre_[theSDD][nSDD]->Fill(theADC,preADC);//same sfera
-     }else{
-      hADCpre_[theSDD][nSDD+1]->Fill(theADC,preADC);//different sfera
-     }
-    }
-   
-    //evdiff plots
-    hEvDiff[theSDD]->Fill(evdiff);
- 
-    //timediff plots
-    hTimeDiff[theSDD]->Fill( timediff );
-
-   }//if(preADC>0) -> only non-triggred hits with prehit
- 
-
-  //TRIGGERED hits ADC 
-  //------------------
-  }else{ //  if(trigg[ihit]!=1)
-   ntrig++;
-   hADC_trig[theSDD]->Fill(theADC);
-   hdrift->Fill(drift[ihit]);
-   hdrift_unzoom->Fill(drift[ihit]);
-
-   //now also for triggered spectra look at previous and post hits:
-   int iprehit,iposthit;
+   timediff = -99999.;
    t1 = drift[ihit]+32768.;
-   nprehits = 0;
-   nposthits = 0;
-   for(int i=0;i<npre;i++){
-    iprehit=ihit-i-1;
-    iposthit=ihit+i+1;
-    if(ihit>i) {
-     if(sdd[iprehit]>0&&adc[iprehit]>0){
-      preSDDt[i]=sdd[iprehit];
-      preADCt[i]=adc[iprehit];
-      pretrig[i]=false;
-      if(trigg[iprehit]==1)pretrig[i]=true;
-      timediff = -99999.;
-      t2 = drift[iprehit]+32768.;
-      if(t1>t2) timediff = t1-t2;
-      if(t2>t1) timediff = t2-t1;
-      preTimeDifft[i]=timediff;
-      preEvDifft[i] = evnr[ihit] - evnr[iprehit];
-      nprehits++;
-     }
-    }
-    if(ihit<nhits-i) {
-     if(sdd[iposthit]>0&&adc[iposthit]>0){
-      postSDDt[i]=sdd[iposthit];
-      postADCt[i]=adc[iposthit];
-      posttrig[i]=false;
-      if(trigg[iposthit]==1)posttrig[i]=true;
-      timediff = -99999.;
-      t2 = drift[iposthit]+32768.;
-      if(t1>t2) timediff = t1-t2;
-      if(t2>t1) timediff = t2-t1;
-      postTimeDifft[i]=timediff;
-      postEvDifft[i] = evnr[ihit] - evnr[iposthit];
-      nposthits++;
-     }
-    }
-   }//npre/post hits loop
-  
-   if(preSDDt[0]>-1) hTimeDiff_trig->Fill(preTimeDifft[0]);
-   if(preSDDt[0]>-1 && pretrig[0]) hTimeDiff_trigtrig->Fill(preTimeDifft[0]);
-   if(preSDDt[0]>-1) hEvDiff_trig->Fill(preEvDifft[0]);
-   if(preSDDt[0]>-1 && posttrig[0]) hEvDiff_trigtrig->Fill(preEvDifft[0]);
+   t2 = drift[ihit-1]+32768.;
+   if(t1>t2) timediff = t1-t2;
+   //if(t2>t1) timediff = t1+(32768.*2)-t2;
+   if(t2>t1) timediff = t2-t1;
 
-   //Sfera plots:
+   //Decide if IsGOOD based in time/event_number (CROSSTALK REMOVAL)
+   //--------------------------------------------===================
+   ISGOODevdiff = true;
+   if(evdiff==0) ISGOODevdiff=false; 
+   ISGOODtimediff = true;
+   if(timediff>0.&&timediff<620.) ISGOODtimediff = false;//std 5microseconds
+   //if(timediff>0.&&timediff<4000.) ISGOODtimediff = false;//test ~20microseconds
+   IsGOOD = true;
+   // ==>  HERE DECIDE IF USE TIME OF EVENT AS CLASSIFIER !!!
+   if(!ISGOODevdiff) IsGOOD = false; 
+   //if(!ISGOODtimediff) IsGOOD = false; 
+   // Flag the hit as good or not, considering also the Sfera
+   bool goodhit = false;
    if(whichSfera[theSDD]>-1){
-    if(whichSfera[theSDD]==whichSfera[preSDDt[0]]){
-     hADCpre_trig[theSDD]->Fill(theADC,preADCt[0]);//same sfera
+    if(whichSfera[theSDD]==whichSfera[preSDD]&&theBUS==preBUS){//same sfera and bus
+     if(IsGOOD) goodhit = true;
+    }else{//different sfera, just use the hit
+     goodhit=true;
     }
    }
 
-   //try to get a clean (crosstalk removed) histo as well for triggered:
-   histoit = false;
-   histoit_restricted = false;
-   if(preSDDt[0]>-1){
-    ISGOODevdiff = true;
-    if(preEvDifft[0]==0) ISGOODevdiff=false;
-    ISGOODtime = true;
-    if(preTimeDifft[0]>0.&&preTimeDifft[0]<620.) ISGOODtime = false;//std 5microseconds
-    if(whichSfera[theSDD]>-1){
-     if(whichSfera[theSDD]==whichSfera[preSDD]){//same sfera, check if it is crosstalk:
-      if(ISGOODtime&&ISGOODevdiff) histoit = true;
-     }else{//different sfera, just histo it:
-      histoit=true;
-      histoit_restricted=true;
-     }
-    }
-    if(histoit) hADCtrigclean[theSDD]->Fill(theADC);
-    if(histoit_restricted) hADCtrigclean_restricted[theSDD]->Fill(theADC);
+   //ADC plots
+   //---------
+   hADC[theBUS][theSDD]->Fill(theADC);
+   hADCpre[theBUS][theSDD]->Fill(theADC,preADC);
+   if(IsGOOD){
+    hADCpreGOOD[theBUS][theSDD]->Fill(theADC,preADC);  //Watch out, here I do not req goodhit!!!
+    if(goodhit) hADCgood[theBUS][theSDD]->Fill(theADC);
+   }else{
+    hADCpreBAD[theBUS][theSDD]->Fill(theADC,preADC);
    }
+  }//if(preADC>0)  SKIP FOR NOW EVENTS WITH NO "PRE" HIT !!!
+   
 
-
+  // --- TRIGGERED hits ADC --- //
+  //------------------------------
+  if(trigg[ihit]==1){
+   ntrig++;
+   hADCtrig[theBUS][theSDD]->Fill(theADC);
+   hDrift->Fill(drift[ihit]);
+   hDriftUnzoom->Fill(drift[ihit]);
   }//end triggered hits
-
-
-  //ENERGY PLOTS
-  //------------
-  if(UseG0[theSDD]!=0&&UseG[theSDD]!=0){//we have calib for this sdd
-   float theE = UseG0[theSDD]+UseG[theSDD]*theADC;
-   float minG = 2.5;//range of accepted gain for the SDD to be summed
-   float maxG = 4.;
-   if(trigg[ihit]!=1){//non-triggered:
-    if(histoit){
-     hE[theSDD]->Fill(theE);
-     if(UseG[theSDD]>minG&&UseG[theSDD]<maxG){
-      goodcalSDD[theSDD]=1;
-      hEsum->Fill(theE);
-      hEsumCP->Fill(theE,CP);
-      if((theSDD)<33){
-       hEsum_external->Fill(theE);
-      }else{
-       hEsum_internal->Fill(theE);
-      }
-     } 
-    }
-   }else{ // TRIGGERED:
-    hE_trig[theSDD]->Fill(theE);
-    hEdrift_trig[theSDD]->Fill(theE,drift[ihit]);
-    if(UseG[theSDD]>minG&&UseG[theSDD]<maxG){//good cal
-     hEsum_trig->Fill(theE);
-
-     bool DriftPeak = false;
-     float tmin = -32580;//define drift time window
-     float tmax = -32375;//define drift time window
-     if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true;
-
-     //count hits:
-     bool goodE = false;
-     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) ) goodE = true;
-     bool goodEall = false;
-     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) || (theE>18000&&theE<24000) ) goodEall = true;
-     if(TDCkaons){
-      if(goodE) htrigKAONShitsE->Fill(theSDD);
-      if(goodEall) htrigKAONShitsEall->Fill(theSDD);
-      if(DriftPeak){
-       if(goodE) htrigKAONShitsE_drift->Fill(theSDD);
-       if(goodEall) htrigKAONShitsEall_drift->Fill(theSDD);
-      }
-      hdrift_kaons->Fill(drift[ihit]);
-     }else{
-      if(goodE) htrigMIPShitsE->Fill(theSDD);
-      if(goodEall) htrigMIPShitsEall->Fill(theSDD);
-      hdrift_mips->Fill(drift[ihit]);
-     }
-
-
-     if(DriftPeak) hEsum_trig_peak->Fill(theE);
-     if(!DriftPeak) hEsum_trig_flat->Fill(theE);
-     if(TDCkaons){//good tdc
-      hEsum_trig_tdc->Fill(theE);
-      if(DriftPeak){
-       hEsum_trig_tdc_drift->Fill(theE);
-       hE_trig_tdc_drift[theSDD]->Fill(theE);
-       if(histoit) hEtrigclean[theSDD]->Fill(theE);
-       if(histoit_restricted) hEtrigclean_restricted[theSDD]->Fill(theE);
-       if((theSDD)<33){
-        hEsum_external_tdc_drift->Fill(theE);
-       }else{
-        hEsum_internal_tdc_drift->Fill(theE);
-       }
-       if((theSDD>=9&&theSDD<=16)||(theSDD>=25&&theSDD<=32) 
-       ||(theSDD>=41&&theSDD<=48)||(theSDD>=57&&theSDD<=64)){
-        hEsum_UP_tdc_drift->Fill(theE);
-       }else{
-        hEsum_DOWN_tdc_drift->Fill(theE);
-       }
-      }
-      //pre/post energy spectra 
-      for(int ipre=0;ipre<nprehits;ipre++){
-       if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
-        if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
-         float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
-         if(ipre==0) hEprepost1[theSDD]->Fill(preE);///these plots with NO drift time req
-         if(ipre<5) hEprepost5[theSDD]->Fill(preE);
-         if(ipre<10) hEprepost10[theSDD]->Fill(preE);
-         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
-          if(ipre==0) hEprepost1_drift[theSDD]->Fill(preE);
-          if(ipre<5) hEprepost5_drift[theSDD]->Fill(preE);
-          if(ipre<10) hEprepost10_drift[theSDD]->Fill(preE);
-         }
-        }
-       }
-      }//pre hits
-      for(int ipost=0;ipost<nposthits;ipost++){
-       if(UseG0[postSDDt[ipost]]!=0&&UseG[postSDDt[ipost]]!=0){//we have calib for this sdd
-        if(UseG[postSDDt[ipost]]>minG&&UseG[postSDDt[ipost]]<maxG){//the cal is good
-         float postE = UseG0[postSDDt[ipost]]+UseG[postSDDt[ipost]]*postADCt[ipost];
-         if(ipost==0) hEprepost1[theSDD]->Fill(postE);///these plots with NO drift time req
-         if(ipost<5) hEprepost5[theSDD]->Fill(postE);
-         if(ipost<10) hEprepost10[theSDD]->Fill(postE);
-         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
-          if(ipost==0) hEprepost1_drift[theSDD]->Fill(postE);
-          if(ipost<5) hEprepost5_drift[theSDD]->Fill(postE);
-          if(ipost<10) hEprepost10_drift[theSDD]->Fill(postE);
-         }
-        }
-       }
-      }//post hits
-     }else{ //outside good tdc
-      hEsum_trig_mip->Fill(theE);
-      if((drift[ihit]>-32400)){
-       hEsum_trig_mip_nodrift->Fill(theE);
-      }
-      //pre/post energy spectra 
-      for(int ipre=0;ipre<nprehits;ipre++){
-       if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
-        if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
-         float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
-         if(ipre==0) hEprepost1_mips[theSDD]->Fill(preE);///these plots with NO drift time req
-         if(ipre<5) hEprepost5_mips[theSDD]->Fill(preE);
-         if(ipre<10) hEprepost10_mips[theSDD]->Fill(preE);
-        }
-       }
-      }//pre hits
-      for(int ipost=0;ipost<nposthits;ipost++){
-       if(UseG0[postSDDt[ipost]]!=0&&UseG[postSDDt[ipost]]!=0){//we have calib for this sdd
-        if(UseG[postSDDt[ipost]]>minG&&UseG[postSDDt[ipost]]<maxG){//the cal is good
-         float postE = UseG0[postSDDt[ipost]]+UseG[postSDDt[ipost]]*postADCt[ipost];
-         if(ipost==0) hEprepost1_mips[theSDD]->Fill(postE);///these plots with NO drift time req
-         if(ipost<5) hEprepost5_mips[theSDD]->Fill(postE);
-         if(ipost<10) hEprepost10_mips[theSDD]->Fill(postE);
-        }
-       }
-      }//post hits
-     }//tdc requirement
-     hEsumCP_trig->Fill(theE,CP);
-     hEdrift->Fill(theE,drift[ihit]); 
-    }
-   }//triggered
-  }//we have calib
 
 
  }//end ihit loop
 
- if(TDCkaons){
-  hKAONStriggerhits->Fill(ntrig);
- }else{
-  hMIPStriggerhits->Fill(ntrig);
- }
- if(ntrig>0) hnhits_trig->Fill(nhits);
- if(ntrig==0) hnhits_notrig->Fill(nhits);
- if(trigg[nhits-1]==1) hnhits_trig2->Fill(nhits);
- if(trigg[nhits-1]!=1) hnhits_notrig2->Fill(nhits);
- oldntrig = ntrig;
-}//end entries loop
-
-//CPtime plot:
-for(int i=0;i<CPnbins;i++){
- hCPtime->SetBinContent(i+1,CPtime[i]);
-}
-
-//write/calib sdd?
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(hADCgood[iSDD]->GetEntries()>=WriteIfHits) writeSDD[iSDD]=true; //write if hADCgood has >10k entries
-}
-
-
-
-
+}//jentry loop
 
 
 
@@ -873,15 +349,18 @@ double eAu_LB = 11513.5;
 //==========================
 const int nPFPeaksMAX = 13;//number of MAX peaks for peak finder
 const int nPFPeaks = 3;//number DESIRED of peaks for peak finder
-float xminPeakFinder = 1600;// Region of peak finding
-float xmaxPeakFinder = 3900;
+ // ==> SELECT HERE THE RANGE OF THE PeakFinder
+ float xminPeakFinder = 1600;// Region of peak finding
+ float xmaxPeakFinder = 3900;
 //Ad hoc calib for last siddhartino He run:
 //for sdd 45 xmaxPeakFinder=3300;
 //for sdd 50 xmaxPeakFinder=3600;
 //....and why SDD 41 is not calibrated?
 int sigmaPeakFinder = 20; //sigma for peak Finder, in adc channels
+sigmaPeakFinder=sigmaPeakFinder/rebinFactor;
+cout<<"sigma peak finder "<<sigmaPeakFinder<<endl;
 float InitThresholdPeakFinder = 0.01; //initial thresholdPar for peak finder, std in TSpectrum is 0.05
-float InitTolerance = 0.02; // 5% -> Tolerance to check that peak assumption is correct
+float InitTolerance = 0.05; // 5% -> Tolerance to check that peak assumption is correct
 Double_t *xpeaks;
 Double_t *ypeaks;
 //float* xpeaks;
@@ -889,18 +368,33 @@ Double_t *ypeaks;
 float xadc[nPFPeaksMAX] ={};
 float yadc[nPFPeaksMAX] ={};
 float PFPeakE[nPFPeaks] ={};
+TGraph* gPeakFinderG[nBUS]; 
+TGraph* gPeakFinderG0[nBUS];
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ gPeakFinderG[iBUS]= new TGraph();
+ gPeakFinderG[iBUS]->SetName(Form("gPeakFinderG_%i",iBUS));
+ gPeakFinderG0[iBUS]= new TGraph();
+ gPeakFinderG0[iBUS]->SetName(Form("gPeakFinderG0_%i",iBUS));
+}
 TString* PFPeakName[nPFPeaks];
-TF1* fPeakFinder[nSDD];
-TH1F* hPreCal[nSDD];
-TGraphErrors* gPreCal[nSDD];
-TGraphErrors* gPreCalLin[nSDD];
-TGraph* gPreCalG = new TGraph();gPreCalG->SetName("gPreCalG");
-TGraph* gPreCalG0 = new TGraph();gPreCalG0->SetName("gPreCalG0");
+TF1* fPeakFinder[nBUS][nSDD];
+TH1F* hPRECAL[nBUS][nSDD];
+TGraphErrors* gPRECAL[nBUS][nSDD];
+TGraphErrors* gPRECALLin[nBUS][nSDD];
+TGraph* gPRECALG[nBUS]; 
+TGraph* gPRECALG0[nBUS];
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ gPRECALG[iBUS]= new TGraph();
+ gPRECALG[iBUS]->SetName(Form("gPRECALG_%i",iBUS));
+ gPRECALG0[iBUS]= new TGraph();
+ gPRECALG0[iBUS]->SetName(Form("gPRECALG0_%i",iBUS));
+}
 int ipoint = 0;
-TF1* fPreCal[nSDD];
+TF1* fPRECAL[nBUS][nSDD];
 TSpectrum *spectrum = new TSpectrum(nPFPeaksMAX);
 TObjArray* fPeakFinderArray = new TObjArray();
-TObjArray* fPreCalArray = new TObjArray();
+TObjArray* fPRECALArray = new TObjArray();
+TObjArray* hPRECALArray = new TObjArray();
 if(IsCalib){
  // Assumption for the PeakFinder peaks:  TiA - CuA - CuB
  //-------------------------------------------------------
@@ -912,29 +406,31 @@ if(IsCalib){
  PFPeakName[2] = new TString("Cu_KB");
 
 
-//PreCal configuration:
-//==============================
-int BkgPars = 3; // BkgPars for bkg here: p0+exp(p1+p2*x)
-int gausnpar = 3;
-TString fstr ("");
-const int nPeaksMAX = 99;
-float PeakE[nPeaksMAX] ={-1.};
-TString* PeakName[nPeaksMAX];
-float AddPeakE[nPeaksMAX] = {-1.};
-TString * AddPeakName[nPeaksMAX];
-int nPeaks = 0;  
-int iInt[nPeaksMAX] = {-1};
-int iMean[nPeaksMAX] = {-1};
-int iSigma[nPeaksMAX] = {-1}; 
-int ip0 = -1;
-int ip1 = -1;
-int ip2 = -1;
-float xminPre[nPeaksMAX] = {-1.};
-float xmaxPre[nPeaksMAX] = {-1.};
+ //PRECAL configuration:
+ //==============================
+ int BkgPars = 3; // BkgPars for bkg here: p0+exp(p1+p2*x)
+ int gausnpar = 3;
+ TString fstr ("");
+ const int nPeaksMAX = 99;
+ float PeakE[nPeaksMAX] ={-1.};
+ TString* PeakName[nPeaksMAX];
+ float AddPeakE[nPeaksMAX] = {-1.};
+ TString * AddPeakName[nPeaksMAX];
+ int nPeaks = 0;  
+ int iInt[nPeaksMAX] = {-1};
+ int iMean[nPeaksMAX] = {-1};
+ int iSigma[nPeaksMAX] = {-1}; 
+ int ip0 = -1;
+ int ip1 = -1;
+ int ip2 = -1;
+ float xminPre[nPeaksMAX] = {-1.};
+ float xmaxPre[nPeaksMAX] = {-1.};
  // ADD PEAKS for pre and final calib HERE:
  //----------------------------------------
  //firstly add PeakFinder peaks:
- for(int i=0;i<nPFPeaks;i++){AddPeakE[nPeaks]=PFPeakE[i];AddPeakName[nPeaks]=PFPeakName[i];nPeaks++;}
+ for(int i=0;i<nPFPeaks;i++){
+  AddPeakE[nPeaks]=PFPeakE[i];AddPeakName[nPeaks]=PFPeakName[i];nPeaks++;
+ }
  //then add whatever you want:
  AddPeakE[nPeaks] = eTi_KB; AddPeakName[nPeaks] = new TString("Ti_KB");nPeaks++;
  //AddPeakE[nPeaks] = eCa_KA; AddPeakName[nPeaks] = new TString("Ca_KA"); nPeaks++;
@@ -944,7 +440,7 @@ float xmaxPre[nPeaksMAX] = {-1.};
  //AddPeakE[nPeaks] = eAu_LA; AddPeakName[nPeaks] = new TString("Au_LA"); nPeaks++;
  //AddPeakE[nPeaks] = eBi_LA; AddPeakName[nPeaks] = new TString("Bi_LA"); nPeaks++;
  //AddPeakE[nPeaks] = eAu_LB; AddPeakName[nPeaks] = new TString("Au_LB"); nPeaks++;
-
+ 
  //Ordered list of peaks for pre and final calibration:
  // -----------------------------------------------------
  //order it and save in PeakE and NamePeak:
@@ -974,7 +470,7 @@ float xmaxPre[nPeaksMAX] = {-1.};
   cout<<" peak#"<<i<<" PeakName = "<<PeakName[i]->Data()<<" PeakE = "<<PeakE[i]<<endl;
  }
 
- //set PreCal fit function: gaussians + bkg
+ //set PRECAL fit function: gaussians + bkg
  fstr = "";
  for(int i = 0; i<nPeaks; i++){
   iInt[i] = gausnpar*i; //define order of the parameters
@@ -988,233 +484,241 @@ float xmaxPre[nPeaksMAX] = {-1.};
  //ip2 = gausnpar*nPeaks+2;
  //fstr += Form("+exp([%i]+[%i]*x)+[%i]",ip0,ip1,ip2);
  fstr += Form("+[%i]+x*[%i]",ip0,ip1);
- cout<<" PreCal fit Function is : "<<fstr<<endl;
+ cout<<" PRECAL fit Function is : "<<fstr<<endl;
 
 
 
+ //BUS and SDD loop
+ //----------------
+ int NCalAttempt = 0;
+ int NgoodCal = 0;
+ for(int iBUS=0;iBUS<nBUS;iBUS++){
+  for(int iSDD=0;iSDD<nSDD;iSDD++){
+   TH1F* thehisto; 
+   thehisto = (TH1F*) hADCgood[iBUS][iSDD]->Clone("thehisto");thehisto->SetName("thehisto");
+   int minstatsForCalib = 1000;
+   if(thehisto->GetEntries()<minstatsForCalib) continue;
+   NCalAttempt++;
 
-
-//sdd loop
-//--------
-int NgoodCal = 0;
-for(int iSDD=0;iSDD<nSDD;iSDD++){
-//for(int iSDD=0;iSDD<12;iSDD++){//for testing
- if(writeSDD[iSDD]){
-  TH1F* thehisto; 
-  thehisto = (TH1F*) hADCgood[iSDD]->Clone("thehisto");thehisto->SetName("thehisto");
-
-
-
-  //  --- Peak Finder Calibration --- //
-  //----------------------------------//
-  cout<<endl<<endl<<"-----PEAK FINDER for SDD "<<iSDD<<" with entries "<<thehisto->GetEntries()<<endl;
-  
-  //restrict to PeakFinder area:
-float xmaxPeakFinder_save = xmaxPeakFinder;
-//Ad hoc calib for last siddhartino He run:
-//for sdd 45 xmaxPeakFinder=3300;
-//for sdd 50 xmaxPeakFinder=3600;
-//....and why SDD 41 is not calibrated?
-if(iSDD==45) xmaxPeakFinder=3300.;
-if(iSDD==50) xmaxPeakFinder=3600.;
-  thehisto->GetXaxis()->SetRangeUser(xminPeakFinder,xmaxPeakFinder);
-xmaxPeakFinder = xmaxPeakFinder_save;
-
-  //peak finder config:
-  Int_t nfound = 0;
-  float thresholdPeakFinder = InitThresholdPeakFinder;
-  while(nfound<nPFPeaks){
-   nfound = spectrum->Search(thehisto,sigmaPeakFinder,"",thresholdPeakFinder);
-   printf("Found %d candidate peaks to fit\n",nfound);
-   thresholdPeakFinder = thresholdPeakFinder*.1;//TSpectrum std=0.05. Change it til it finds the peaks
-  }
-  //xpeaks = (Double_t*)spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
-  //ypeaks = (Double_t*)spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
-  xpeaks = spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
-  ypeaks = spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
-
-  //reorder in adc counts and check if compatible with maximum peaks assumption
-  themin = 999999.;
-  imin = 0;
-  for(int i =0;i<nfound;i++){ //find the smallest, write it in xadc and remove it:
-   themin = 999999.;
-   for(int j =0;j<nfound;j++){
-    if(xpeaks[j]<themin){
-     themin = xpeaks[j];
-     imin = j;
-    }
+   //  --- Peak Finder Calibration --- //
+   //----------------------------------//
+   cout<<endl<<endl<<"---PEAK FINDER B"<<iBUS<<" S"<<iSDD<<" stat#"<<thehisto->GetEntries()<<endl;
+   
+   //restrict to PeakFinder area:
+   float xmaxPeakFinder_save = xmaxPeakFinder;
+   //Ad hoc calib for last siddhartino He run:
+   //for sdd 45 xmaxPeakFinder=3300;
+   //for sdd 50 xmaxPeakFinder=3600;
+   //....and why SDD 41 is not calibrated?
+   //if(iSDD==45) xmaxPeakFinder=3300.;
+   //if(iSDD==50) xmaxPeakFinder=3600.;
+   thehisto->GetXaxis()->SetRangeUser(xminPeakFinder,xmaxPeakFinder);
+   xmaxPeakFinder = xmaxPeakFinder_save;
+ 
+   //peak finder config:
+   Int_t nfound = 0;
+   float thresholdPeakFinder = InitThresholdPeakFinder;
+   int nPFtries = 0;
+   while(nfound<nPFPeaks&&nPFtries<50){
+    nfound = spectrum->Search(thehisto,sigmaPeakFinder,"",thresholdPeakFinder);
+    printf("Found %d candidate peaks to fit\n",nfound);
+    thresholdPeakFinder = thresholdPeakFinder*.1;//TSpectrum std=0.05. Change it til it finds the peaks
+    nPFtries++;
    }
-   xadc[i]=xpeaks[imin];
-   yadc[i]=ypeaks[imin];
-   xpeaks[imin]=999999.;
-  }
-  //print them, now ordered:
-  for(int i =0;i<nfound;i++){cout<<" found peak ADC="<<xadc[i]<<" height "<<yadc[i]<<endl;}
-  cout<<endl;
+   if(nPFtries>=50) {
+    cout<<" PEAK FINDER DIDNT WORK, ==> CONTINUE"<<endl;
+    continue;
+   }
+   xpeaks = spectrum->GetPositionX();//array with X-positions of the centroids found by TSpectrum 
+   ypeaks = spectrum->GetPositionY();//array with X-positions of the centroids found by TSpectrum 
+ 
+   //reorder in adc counts and check if compatible with maximum peaks assumption
+   themin = 999999.;
+   imin = 0;
+   for(int i =0;i<nfound;i++){ //find the smallest, write it in xadc and remove it:
+    themin = 999999.;
+    for(int j =0;j<nfound;j++){
+     if(xpeaks[j]<themin){
+      themin = xpeaks[j];
+      imin = j;
+     }
+    }
+    xadc[i]=xpeaks[imin];
+    yadc[i]=ypeaks[imin];
+    xpeaks[imin]=999999.;
+   }
+   //print them, now ordered:
+   for(int i =0;i<nfound;i++){cout<<" found peak ADC="<<xadc[i]<<" height "<<yadc[i]<<endl;}
+   cout<<endl;
 
 
-  //check if the peaks found are compatible with the assumption:
-  //------------------------------------------------------------
-  float eDist10 = PFPeakE[1]-PFPeakE[0];
-  float eDist21 = PFPeakE[2]-PFPeakE[1];
-  float Erelation = eDist21/eDist10;
-  //make trios out of all found peaks:
-  float GPF =0.;
-  float G0PF =0;
-  bool TestPassed = false;
-  int ipeak0 = -1;
-  int ipeak1 = -1;
-  int ipeak2 = -1;
-  for(int i0=0; i0<nfound; i0++){
-   for(int i1=i0+1; i1<nfound; i1++){
-    for(int i2=i1+1; i2<nfound; i2++){
-     cout<<endl<<" -> trying trio "<<i0<<" "<<i1<<" "<<i2<<endl;   
-
-     float xDist10 = xadc[i1]-xadc[i0];
-     float xDist21 = xadc[i2]-xadc[i1];
-     float ADCrelation = xDist21/xDist10;
-     cout<<" Check assumption: Energy relation "<<Erelation<<" vs ADC relation "<<ADCrelation<<endl;
-
-     //Define tolerance parameter
-     float tol = InitTolerance; // 5%
-     bool TolerancePass = true;
-     if(fabs(1.-(Erelation/ADCrelation))>tol) TolerancePass = false;
-     if(!TolerancePass) cout<<" Tolerance not passed: tolERROR!!!  "<<endl;
-
-     // Get Peak Finder calibration Offset G0PF and Slope GPF
-     float Dadc = xadc[i0]-xadc[i1];
-     float De = PFPeakE[0]-PFPeakE[1];
-     GPF = De/Dadc;
-     G0PF = -1.*xadc[i0]*GPF+PFPeakE[0];
-     cout<<"PeakFinder cal, offset G0PF "<<G0PF<<" slope GPF "<<GPF<<endl;
-
-     //define an acceptable gain and offset and check if tolerance, G, and G0 are ok:
-     float mingoodG = 2.9;float maxgoodG = 3.5;
-     float mingoodG0 = -3000;float maxgoodG0 = -1000;
-     if(GPF<maxgoodG&&GPF>mingoodG&&G0PF<maxgoodG0&&G0PF>mingoodG0&&TolerancePass){
-      cout<<" -- TEST PASSED! --"<<endl<<endl; 
-      TestPassed = true;
-      ipeak0 = i0;
-      ipeak1 = i1;
-      ipeak2 = i2;
-      NgoodCal++;
+   //check if the peaks found are compatible with the assumption:
+   //------------------------------------------------------------
+   float eDist10 = PFPeakE[1]-PFPeakE[0];
+   float eDist21 = PFPeakE[2]-PFPeakE[1];
+   float Erelation = eDist21/eDist10;
+   //make trios out of all found peaks:
+   float GPF =0.;
+   float G0PF =0;
+   bool TestPassed = false;
+   int ipeak0 = -1;
+   int ipeak1 = -1;
+   int ipeak2 = -1;
+   for(int i0=0; i0<nfound; i0++){
+    for(int i1=i0+1; i1<nfound; i1++){
+     for(int i2=i1+1; i2<nfound; i2++){
+      cout<<endl<<" -> trying trio "<<i0<<" "<<i1<<" "<<i2<<endl;   
+ 
+      float xDist10 = xadc[i1]-xadc[i0];
+      float xDist21 = xadc[i2]-xadc[i1];
+      float ADCrelation = xDist21/xDist10;
+      cout<<" Check assumption: Energy relation "<<Erelation<<" vs ADC relation "<<ADCrelation<<endl;
+ 
+      //Define tolerance parameter
+      float tol = InitTolerance; // 5%
+      bool TolerancePass = true;
+      if(fabs(1.-(Erelation/ADCrelation))>tol) TolerancePass = false;
+      if(!TolerancePass) cout<<" Tolerance not passed: tolERROR!!!  "<<endl;
+ 
+      // Get Peak Finder calibration Offset G0PF and Slope GPF
+      float Dadc = xadc[i0]-xadc[i1];
+      float De = PFPeakE[0]-PFPeakE[1];
+      GPF = De/Dadc;
+      G0PF = -1.*xadc[i0]*GPF+PFPeakE[0];
+      cout<<"PeakFinder cal, offset G0PF "<<G0PF<<" slope GPF "<<GPF<<endl;
+ 
+      //define an acceptable gain and offset and check if tolerance, G, and G0 are ok:
+      float mingoodG = 2.9;float maxgoodG = 3.9;
+      float mingoodG0 = -3000;float maxgoodG0 = -1000;
+      if(GPF<maxgoodG&&GPF>mingoodG&&G0PF<maxgoodG0&&G0PF>mingoodG0&&TolerancePass){
+       cout<<" -- TEST PASSED! --"<<endl<<endl; 
+       TestPassed = true;
+       ipeak0 = i0;
+       ipeak1 = i1;
+       ipeak2 = i2;
+       NgoodCal++;
+      }
+      if(TestPassed) break;
      }
      if(TestPassed) break;
     }
     if(TestPassed) break;
    }
-   if(TestPassed) break;
-  }
 
-  //find also the highest height among the selected ones (ipeak0,ipeak1,ipeak2):
-  float highestheight = 0.;
-  if(ipeak0>-1){
-   if(yadc[ipeak0]>highestheight) highestheight = yadc[ipeak0];
-   if(yadc[ipeak1]>highestheight) highestheight = yadc[ipeak1];
-   if(yadc[ipeak2]>highestheight) highestheight = yadc[ipeak2];
-  }
+   //find also the highest height among the selected ones (ipeak0,ipeak1,ipeak2):
+   float highestheight = 0.;
+   if(ipeak0>-1){
+    if(yadc[ipeak0]>highestheight) highestheight = yadc[ipeak0];
+    if(yadc[ipeak1]>highestheight) highestheight = yadc[ipeak1];
+    if(yadc[ipeak2]>highestheight) highestheight = yadc[ipeak2];
+   }
 
-  // peak finder all done, now a couple of  histograms and function:
-  fPeakFinder[iSDD] = new TF1(Form("fPeakFinder%i",iSDD),"pol1",0.,8000.);
-  fPeakFinder[iSDD]->SetParameter(0,G0PF);
-  fPeakFinder[iSDD]->SetParameter(1,GPF);
-  fPeakFinderArray->Add(fPeakFinder[iSDD]);
+   // peak finder all done, now a couple of  histograms and function:
+   fPeakFinder[iBUS][iSDD] = new TF1(Form("fPeakFinder_%i_%i",iBUS,iSDD),"pol1",0.,8000.);
+   fPeakFinder[iBUS][iSDD]->SetParameter(0,G0PF);
+   fPeakFinder[iBUS][iSDD]->SetParameter(1,GPF);
+   fPeakFinderArray->Add(fPeakFinder[iBUS][iSDD]);
+   //G and G0 plots:
+   gPeakFinderG[iBUS]->SetPoint(ipoint,iSDD,GPF);
+   gPeakFinderG0[iBUS]->SetPoint(ipoint,iSDD,G0PF);
 
 
   
-  //  ---  Pre-Calibration --- //
-  //----------------------------------//
-  if(!QuickCalib){
-   float sigmaADCguess = 20.;//start with an initial peak resolution in ADC of 20
-   //Fit limits:
-   for(int i=0;i<nPeaks;i++){
+   //  ---  Pre-Calibration --- //
+   //----------------------------------//
+   if(!QuickCalib){
+    float sigmaADCguess = 20.;//start with an initial peak resolution in ADC of 20
+    //Fit limits:
+    for(int i=0;i<nPeaks;i++){
      xminPre[i] = (PeakE[i]-G0PF)/GPF - 2.5*sigmaADCguess;
      xmaxPre[i] = (PeakE[i]-G0PF)/GPF + 3.*sigmaADCguess;
-   }
-   //put to infinite the errors outside the limits so this region is not fitted:
-   for(int ibin=1;ibin<=thehisto->GetNbinsX();ibin++){
-    bool keep = false;
-    for(int i=0;i<nPeaks;i++){
-     if(thehisto->GetBinCenter(ibin)>xminPre[i]&&thehisto->GetBinCenter(ibin)<xmaxPre[i]) keep=true;
     }
-    if(!keep) thehisto->SetBinError(ibin,999999.);
-   }
-   //set function:
-   TF1* fPre = new TF1("fPre",fstr,xminPre[0],xmaxPre[nPeaks-1]);
-   //set initial parameters:
-   for(int i=0;i<nPeaks;i++){
-    fPre->SetParameter(iInt[i],highestheight*sigmaADCguess);//initialize: height of highest PFpeak*sigma
-    //cout<<"fPre->SetParameter("<<iInt[i]<<","<<yadc[0]*sigmaADCguess<<");"<<endl;
-    fPre->SetParameter(iMean[i],  (PeakE[i]-G0PF)/GPF   );
-    //cout<<"fPre->SetParameter("<<iMean[i]<<","<<(PeakE[i]-G0PF)/GPF<<");"<<endl;
-    fPre->SetParameter(iSigma[i],  sigmaADCguess   );
-    //cout<<"fPre->SetParameter("<<iSigma[i]<<","<<sigmaADCguess<<");"<<endl;
-   }
-   //set pol:
-   fPre->SetParameter(ip0,thehisto->GetEntries()/thehisto->GetNbinsX()/20);
-   fPre->SetParLimits(ip0,0.,thehisto->GetEntries()/thehisto->GetNbinsX());
-   //cout<<"fPre->SetParameter("<<ip0<<","<<thehisto->GetEntries()/thehisto->GetNbinsX()/10<<");"<<endl;
-   fPre->SetParameter(ip1,0.);
-   fPre->SetParLimits(ip1,-0.01,0.01);
-   //cout<<"fPre->SetParameter("<<ip1<<",0.);"<<endl;
+    //put to infinite the errors outside the limits so this region is not fitted:
+    for(int ibin=1;ibin<=thehisto->GetNbinsX();ibin++){
+     bool keep = false;
+     for(int i=0;i<nPeaks;i++){
+      if(thehisto->GetBinCenter(ibin)>xminPre[i]&&thehisto->GetBinCenter(ibin)<xmaxPre[i]) keep=true;
+     }
+     if(!keep) thehisto->SetBinError(ibin,999999.);
+    }
+    //set function:
+    TF1* fPre = new TF1("fPre",fstr,xminPre[0],xmaxPre[nPeaks-1]);
+    //set initial parameters:
+    for(int i=0;i<nPeaks;i++){
+     fPre->SetParameter(iInt[i],highestheight*sigmaADCguess);//initialize: height of highest PFpeak*sigma
+     fPre->SetParName(iInt[i],Form("gauss%i_Hei",i));
+     //cout<<"fPre->SetParameter("<<iInt[i]<<","<<yadc[0]*sigmaADCguess<<");"<<endl;
+     fPre->SetParameter(iMean[i],  (PeakE[i]-G0PF)/GPF   );
+     fPre->SetParName(iMean[i],Form("gauss%i_Mea",i));
+     //cout<<"fPre->SetParameter("<<iMean[i]<<","<<(PeakE[i]-G0PF)/GPF<<");"<<endl;
+     fPre->SetParameter(iSigma[i],  sigmaADCguess   );
+     fPre->SetParName(iSigma[i],Form("gauss%i_Sig",i));
+     //cout<<"fPre->SetParameter("<<iSigma[i]<<","<<sigmaADCguess<<");"<<endl;
+    }
+    //set pol:
+    fPre->SetParameter(ip0,thehisto->GetEntries()/thehisto->GetNbinsX()/20);
+    fPre->SetParLimits(ip0,0.,thehisto->GetEntries()/thehisto->GetNbinsX());
+    //cout<<"fPre->SetParameter("<<ip0<<","<<thehisto->GetEntries()/thehisto->GetNbinsX()/10<<");"<<endl;
+    fPre->SetParameter(ip1,0.);
+    fPre->SetParLimits(ip1,-0.01,0.01);
+    //cout<<"fPre->SetParameter("<<ip1<<",0.);"<<endl;
+  
+    //do the pre-Fit
+    //thehisto->Fit(fPre,"","0R",xminPre[0],xmaxPre[nPeaks-1]);
+    thehisto->Fit(fPre,"","R",xminPre[0],xmaxPre[nPeaks-1]);
+  
+    //put back original errors:
+    for(int ibin=1;ibin<=thehisto->GetNbinsX();ibin++){
+     thehisto->SetBinError(ibin,hADCgood[iBUS][iSDD]->GetBinError(ibin));
+    }
  
-   //do the pre-Fit
-   //thehisto->Fit(fPre,"","0R",xminPre[0],xmaxPre[nPeaks-1]);
-   thehisto->Fit(fPre,"","R",xminPre[0],xmaxPre[nPeaks-1]);
+    //Fit straight line to the peaks to get PRECAL calibration function
+    gPRECAL[iBUS][iSDD] = new TGraphErrors();
+    gPRECAL[iBUS][iSDD]->SetName(Form("gPRECAL_%i_%i",iBUS,iSDD));
+    for(int i=0;i<nPeaks;i++){
+     gPRECAL[iBUS][iSDD]->SetPoint(i, PeakE[i], fPre->GetParameter(iMean[i]) ); 
+     gPRECAL[iBUS][iSDD]->SetPointError(i, 0., fPre->GetParError(iMean[i])); 
+    }
+    TF1* fline = new TF1("fline","pol1");
+    fline->SetParameter(0, -1.*G0PF/GPF);//inital pars from peak finder
+    fline->SetParameter(1, 1./GPF);//inital pars from peak finder
+    gPRECAL[iBUS][iSDD]->Fit(fline,"0");
+    float G0Pre = -1.*fline->GetParameter(0)/fline->GetParameter(1);
+    float GPre = 1./fline->GetParameter(1);
+    cout<<endl<<" PRECALIBRATION COMPLETED: G0 = "<<G0Pre<<"    G = "<<GPre<<endl<<endl<<endl;
  
-   //put back original errors:
-   for(int ibin=1;ibin<=thehisto->GetNbinsX();ibin++){
-    thehisto->SetBinError(ibin,hADCgood[iSDD]->GetBinError(ibin));
-   }
-
-   //Fit straight line to the peaks to get PreCal calibration function
-   gPreCal[iSDD] = new TGraphErrors();
-   gPreCal[iSDD]->SetName(Form("gPreCal%i",iSDD));
-   for(int i=0;i<nPeaks;i++){
-    gPreCal[iSDD]->SetPoint(i, PeakE[i], fPre->GetParameter(iMean[i]) ); 
-    gPreCal[iSDD]->SetPointError(i, 0., fPre->GetParError(iMean[i])); 
-   }
-   TF1* fline = new TF1("fline","pol1");
-   fline->SetParameter(0, -1.*G0PF/GPF);//inital pars from peak finder
-   fline->SetParameter(1, 1./GPF);//inital pars from peak finder
-   gPreCal[iSDD]->Fit(fline,"0");
-   float G0Pre = -1.*fline->GetParameter(0)/fline->GetParameter(1);
-   float GPre = 1./fline->GetParameter(1);
-   cout<<endl<<" PRECALIBRATION COMPLETED: G0 = "<<G0Pre<<"    G = "<<GPre<<endl<<endl<<endl;
-
-   //PreCal histograms and function:
-   hPreCal[iSDD] = (TH1F*) thehisto->Clone(Form("hPreCal%i",iSDD));
-   hPreCal[iSDD]->SetName(Form("hPreCal%i",iSDD));
-   hPreCal[iSDD]->GetYaxis()->SetRangeUser(.0001,highestheight*1.2);
-   fPreCal[iSDD] = new TF1(Form("fPreCal%i",iSDD),"pol1",0.,8000.);
-   fPreCal[iSDD]->SetParameter(0, G0Pre  );
-   fPreCal[iSDD]->SetParameter(1, GPre );
-   fPreCalArray->Add(fPreCal[iSDD]);
-   //linearity plot:
-   gPreCalLin[iSDD] = new TGraphErrors();
-   gPreCalLin[iSDD]->SetName(Form("gPreCalLin%i",iSDD));
-   for(int i=0;i<nPeaks;i++){
-    gPreCalLin[iSDD]->SetPoint(i,PeakE[i],fPre->GetParameter(iMean[i])-fline->Eval(PeakE[i]));
-    gPreCalLin[iSDD]->SetPointError(i,0.,fPre->GetParError(iMean[i]));
-   }
-   //G and G0 plots:
-   gPreCalG->SetPoint(ipoint,iSDD,GPre);
-   gPreCalG0->SetPoint(ipoint,iSDD,G0Pre);
-   ipoint++;
-
-  //clean the mess
-   fline->Delete();
-  }//!QuickCalib
-
-
-
-  thehisto->Delete();
-
- }//if write
-}//sdd loop
-cout<<endl<<" NICELY CALIBRATED SDD's = "<<NgoodCal<<endl<<endl;
+    //PRECAL histograms and function:
+    hPRECAL[iBUS][iSDD] = (TH1F*) thehisto->Clone(Form("hPRECAL_%i_%i",iBUS,iSDD));
+//    hPRECAL[iBUS][iSDD]->SetName(Form("hPRECAL_%i_%i",iBUS,iSDD));
+//    hPRECAL[iBUS][iSDD]->GetYaxis()->SetRangeUser(.0001,highestheight*1.2);
+    fPRECAL[iBUS][iSDD] = new TF1(Form("fPRECAL_%i_%i",iBUS,iSDD),"pol1",0.,8000.);
+    fPRECAL[iBUS][iSDD]->SetParameter(0, G0Pre  );
+    fPRECAL[iBUS][iSDD]->SetParameter(1, GPre );
+    fPRECALArray->Add(fPRECAL[iBUS][iSDD]);
+    hPRECALArray->Add(hPRECAL[iBUS][iSDD]);
+    //linearity plot:
+    gPRECALLin[iBUS][iSDD] = new TGraphErrors();
+    gPRECALLin[iBUS][iSDD]->SetName(Form("gPRECALLin_%i_%i",iBUS,iSDD));
+    for(int i=0;i<nPeaks;i++){
+     gPRECALLin[iBUS][iSDD]->SetPoint(i,PeakE[i],fPre->GetParameter(iMean[i])-fline->Eval(PeakE[i]));
+     gPRECALLin[iBUS][iSDD]->SetPointError(i,0.,fPre->GetParError(iMean[i]));
+    }
+    //G and G0 plots:
+    gPRECALG[iBUS]->SetPoint(ipoint,iSDD,GPre);
+    gPRECALG0[iBUS]->SetPoint(ipoint,iSDD,G0Pre);
+    ipoint++;
+ 
+   //clean the mess
+    fline->Delete();
+   }//!QuickCalib
+ 
+   thehisto->Delete();
+   printf("SDD calibrated: %i / %i \n",NgoodCal,NCalAttempt);
+ 
+  }//sdd loop
+ }//bus loop
+ printf("\n %i NICELY CALIBRATED SDD's out of %i with stats, tol=%f\n\n",NgoodCal,NCalAttempt,InitTolerance*100);
 }//if(IsCalib)
-
 
 
 
@@ -1255,257 +759,61 @@ cout<<endl<<" NICELY CALIBRATED SDD's = "<<NgoodCal<<endl<<endl;
 //______________________________________________________________________________________________________//
 TFile* fout = new TFile(sfileout,"RECREATE");
 
-hnhits_trig->Write();
-hnhits_notrig->Write();
-hnhits_trig2->Write();
-hnhits_notrig2->Write();
-hseconds_trig->Write();
-hseconds_notrig->Write();
-hseconds_trig2->Write();
-hseconds_notrig2->Write();
+int minstats  = 100;//write histos only if entries>minstats;
 
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(writeSDD[iSDD]){
-  fout->mkdir(Form("SDD%i",iSDD));
-  fout->cd(Form("SDD%i",iSDD));
-  hADC[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADC[iSDD]->Write();
-  hADCpre[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpre[iSDD]->Write();
-  //for(int jSDD=0;jSDD<nSDD;jSDD++){
-  for(int jSDD=0;jSDD<nSDD+2;jSDD++){
-    hADCpre_[iSDD][jSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-    hADCpre_[iSDD][jSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-    hADCpre_[iSDD][jSDD]->Write();
-  }
-  hADCpreBADtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpreBADtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpreBADtime[iSDD]->Write();
-  hADCpreGOODtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpreGOODtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpreGOODtime[iSDD]->Write();
-  hADCpreGOODevdiff[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpreGOODevdiff[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpreGOODevdiff[iSDD]->Write();
-  hADCpreBADevdiff[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpreBADevdiff[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpreBADevdiff[iSDD]->Write();
-  hADCpre_GOODev_GOODtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_GOODev_GOODtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_GOODev_GOODtime[iSDD]->Write();
-  hADCpre_GOODev_GOODtime1D[iSDD]->Write();
-  hADCpre_GOODev_BADtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_GOODev_BADtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_GOODev_BADtime[iSDD]->Write();
-  hADCpre_BADev_GOODtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_BADev_GOODtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_BADev_GOODtime[iSDD]->Write();
-  hADCpre_BADev_BADtime[iSDD]->GetXaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_BADev_BADtime[iSDD]->GetYaxis()->SetRangeUser(500.,maxadc);
-  hADCpre_BADev_BADtime[iSDD]->Write();
-  hTimeDiff[iSDD]->Write();
-  hEvDiff[iSDD]->Write();
-  hADCgood[iSDD]->Write();
-  hADCgoodCurrent[iSDD]->Write();
-  hADCgoodCurrent2[iSDD]->Write();
-  hADCgoodRate[iSDD]->Write();
-  hADCgoodRate2[iSDD]->Write();
-  hADCgoodZeroCurrent[iSDD]->Write();
-  hADCgoodWithCurrent[iSDD]->Write();
- }//writesdd
-}//sdd
-//fg->Write();
+//ADC arrays
+TDirectory *dirs[MaxArrays];
+for(int iArr=0;iArr<nArrADC;iArr++){
+//create dir
+ dirs[iArr] = (TDirectory*)fout->mkdir(ArrADC[iArr]->GetName());dirs[iArr]->cd();
+ for(int ih=0;ih<ArrADC[iArr]->GetEntriesFast();ih++){
+  if(((TH1F*)ArrADC[iArr]->At(ih))->GetEntries()>minstats) ArrADC[iArr]->At(ih)->Write(); 
+ }
+}
 
-//go back to main directory:
+//See Cross talk
 fout->cd();
-
-//Create also a TObjarray with the hADCgood histo:
-TObjArray* hArray = new TObjArray();
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(writeSDD[iSDD]){
-  hArray->Add(hADCgood[iSDD]);
+TObjArray* CROSSTALK = new TObjArray();
+THStack *THScrosstalk[nBUS][nSDD];
+for(int iBUS=0;iBUS<nBUS;iBUS++){
+ for(int iSDD=0;iSDD<nSDD;iSDD++){
+  if(hADC[iBUS][iSDD]->GetEntries()>0){
+   THScrosstalk[iBUS][iSDD] = new THStack(Form("CrossTalk_%i_%i",iBUS,iSDD),"");
+   THScrosstalk[iBUS][iSDD]->Add(hADC[iBUS][iSDD],"nostack");
+   THScrosstalk[iBUS][iSDD]->Add(hADCgood[iBUS][iSDD],"nostack");
+   CROSSTALK->Add(THScrosstalk[iBUS][iSDD]);
+  }
  }
 }
-hArray->Write("hArray",TObject::kSingleKey);
+CROSSTALK->Write("CROSSTALK",TObject::kSingleKey);
 
-TObjArray* hArray_trig = new TObjArray();
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(writeSDD[iSDD]){
-  hArray_trig->Add(hADC_trig[iSDD]);
- }
-}
-hArray_trig->Write("hArray_trig",TObject::kSingleKey);
-
+//KT array
+ fout->cd();
+ ArrKT->Write("KaonTrigger",TObject::kSingleKey);
 
 if(IsCalib){
- fPeakFinderArray->Write("fPeakFinderArray",TObject::kSingleKey);
- 
+ //fPeakFinderArray->Write("PeakFinder_function",TObject::kSingleKey);
+ TObjArray* PeakFinderArray = new TObjArray();
+ for(int iBUS=0;iBUS<nBUS;iBUS++){
+  gPeakFinderG[iBUS]->SetMarkerStyle(21);
+  gPeakFinderG0[iBUS]->SetMarkerStyle(21);
+  PeakFinderArray->Add(gPeakFinderG[iBUS]);
+  PeakFinderArray->Add(gPeakFinderG0[iBUS]);
+ }
+ PeakFinderArray->Write("PeakFinder_G_G0",TObject::kSingleKey);
  if(!QuickCalib){
- //PreCal calib:
- TObjArray* hPreCalArray = new TObjArray();
- TObjArray* gPreCalArray = new TObjArray();
- TObjArray* gPreCalLinArray = new TObjArray();
- //TObjArray* fPreCalArray = new TObjArray();
- for(int iSDD=0;iSDD<nSDD;iSDD++){
-  if(writeSDD[iSDD]){
-   hPreCalArray->Add(hPreCal[iSDD]);
-   gPreCalArray->Add(gPreCal[iSDD]);
-   gPreCalLinArray->Add(gPreCalLin[iSDD]);
-   //fPreCalArray->Add(fPreCal[iSDD]);
+  //fPRECALArray->Write("PRECAL_function",TObject::kSingleKey);
+  hPRECALArray->Write("PRECAL_histos",TObject::kSingleKey);
+  TObjArray* PRECALArray = new TObjArray();
+  for(int iBUS=0;iBUS<nBUS;iBUS++){
+   gPRECALG[iBUS]->SetMarkerStyle(21);
+   gPRECALG0[iBUS]->SetMarkerStyle(21);
+   PRECALArray->Add(gPRECALG[iBUS]);
+   PRECALArray->Add(gPRECALG0[iBUS]);
   }
- }
- hPreCalArray->Write("hPreCalArray",TObject::kSingleKey);
- gPreCalLinArray->Write("gPreCalLinArray",TObject::kSingleKey);
- fPreCalArray->Write("fPreCalArray",TObject::kSingleKey);
- gPreCalG0->Write();
- gPreCalG->Write();
-
+  PRECALArray->Write("PRECAL_G_G0",TObject::kSingleKey);
  }
 }
-
-//write rate related plots:
-rate_c->Write();
-
- // DO SUM, other stuff, and WRITE ENERGY plots:
- //---------------------------------------------
- TObjArray* hEarray = new TObjArray();
- TObjArray* hEarray_trig = new TObjArray();
- TObjArray* hEarray_trig_tdc_drift = new TObjArray();
- TObjArray* hEarray_drift = new TObjArray();
-
-
- //sum related:
- int MinEntriesToSum = 999; // refered to non-triggered spectra
- int isummed = 0;
- bool summedSDD[nSDD]={};
- TH1F* hSDDsummed = new TH1F("hSDDsummed","",nSDD,0,nSDD);
- TH1F* htotalSDDsummed = new TH1F("htotalSDDsummed","",nSDD,0,nSDD);
- for(int iSDD=0;iSDD<nSDD;iSDD++){
-  if(goodcalSDD[iSDD]){
-   if(hE[iSDD]->GetEntries()>MinEntriesToSum){//SDD considered summed? decide in base of non-trigg spectr
-    isummed++;
-    summedSDD[iSDD]=1;
-    hSDDsummed->Fill(iSDD);
-   }
-   hEarray->Add(hE[iSDD]);
-   hEarray_trig->Add(hE_trig[iSDD]);
-   hEarray_trig_tdc_drift->Add(hE_trig_tdc_drift[iSDD]);
-   hEarray_drift->Add(hEdrift_trig[iSDD]);
-  }
- }//iSDD
-
-hEarray->Write("hEarray",TObject::kSingleKey);
-hEarray_trig->Write("hEarray_trig",TObject::kSingleKey);
-hEarray_trig_tdc_drift->Write("hEarray_trig_tdc_drift",TObject::kSingleKey);
-hEarray_drift->Write("hEarray_drift",TObject::kSingleKey);
-
-
-hEsum->Write();
-hEsum_trig->Write();
-hEsum_trig_peak->Write();
-hEsum_trig_flat->Write();
-hEsum_trig_tdc->Write();
-hEsum_trig_tdc_drift->Write();
-hEsum_trig_mip->Write();
-hEsum_trig_mip_nodrift->Write();
-hEsum_external->Write();
-hEsum_internal->Write();
-hEsum_external_tdc_drift->Write();
-hEsum_internal_tdc_drift->Write();
-hEsum_UP_tdc_drift->Write();
-hEsum_DOWN_tdc_drift->Write();
-
-htotalSDDsummed->Fill(isummed);
-cout<<isummed<<" summed sdd's"<<endl;
-hSDDsummed->Write();
-htotalSDDsummed->Write();
-hEsumCP->Write();
-hEsumCP_trig->Write();
-hBuffertime->Write();
-hCPtime->Write();
-
-hktwide->Write();
-hkt->Write();
-hktrot->Write();
-hdrift->Write();
-hdrift_unzoom->Write();
-hdrift_kaons->Write();
-hdrift_mips->Write();
-
-hEdrift->Write();
-
-hTimeDiff_trig->Write();
-hTimeDiff_trigtrig->Write();
-hEvDiff_trig->Write();
-hEvDiff_trigtrig->Write();
-
-//hADCpre_trig array:
-TObjArray* hADCpre_trigArray = new TObjArray();
-TObjArray* hEprepost1_Array = new TObjArray();
-TObjArray* hEprepost5_Array = new TObjArray();
-TObjArray* hEprepost10_Array = new TObjArray();
-TObjArray* hEprepost1_drift_Array = new TObjArray();
-TObjArray* hEprepost5_drift_Array = new TObjArray();
-TObjArray* hEprepost10_drift_Array = new TObjArray();
-TObjArray* hEprepost1_mips_Array = new TObjArray();
-TObjArray* hEprepost5_mips_Array = new TObjArray();
-TObjArray* hEprepost10_mips_Array = new TObjArray();
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(writeSDD[iSDD]){
-  hADCpre_trigArray->Add(hADCpre_trig[iSDD]);
-  hEprepost1_Array->Add(hEprepost1[iSDD]);
-  hEprepost5_Array->Add(hEprepost5[iSDD]);
-  hEprepost10_Array->Add(hEprepost10[iSDD]);
-  hEprepost1_drift_Array->Add(hEprepost1_drift[iSDD]);
-  hEprepost5_drift_Array->Add(hEprepost5_drift[iSDD]);
-  hEprepost10_drift_Array->Add(hEprepost10_drift[iSDD]);
-  hEprepost1_mips_Array->Add(hEprepost1_mips[iSDD]);
-  hEprepost5_mips_Array->Add(hEprepost5_mips[iSDD]);
-  hEprepost10_mips_Array->Add(hEprepost10_mips[iSDD]);
- }
-}
-hADCpre_trigArray->Write("hADCpre_trigArray",TObject::kSingleKey);
-hEprepost1_Array->Write("hEprepost1_Array",TObject::kSingleKey);
-hEprepost5_Array->Write("hEprepost5_Array",TObject::kSingleKey);
-hEprepost10_Array->Write("hEprepost10_Array",TObject::kSingleKey);
-hEprepost1_drift_Array->Write("hEprepost1_drift_Array",TObject::kSingleKey);
-hEprepost5_drift_Array->Write("hEprepost5_drift_Array",TObject::kSingleKey);
-hEprepost10_drift_Array->Write("hEprepost10_drift_Array",TObject::kSingleKey);
-hEprepost1_mips_Array->Write("hEprepost1_mips_Array",TObject::kSingleKey);
-hEprepost5_mips_Array->Write("hEprepost5_mips_Array",TObject::kSingleKey);
-hEprepost10_mips_Array->Write("hEprepost10_mips_Array",TObject::kSingleKey);
-
-
-//clean trigger (cross-talk removed) plots
-TObjArray* hADCtrigclean_Array = new TObjArray();
-TObjArray* hADCtrigclean_restricted_Array = new TObjArray();
-TObjArray* hEtrigclean_Array = new TObjArray();
-TObjArray* hEtrigclean_restricted_Array = new TObjArray();
-for(int iSDD=0;iSDD<nSDD;iSDD++){
- if(writeSDD[iSDD]){
-  hADCtrigclean_Array->Add(hADCtrigclean[iSDD]);
-  hADCtrigclean_restricted_Array->Add(hADCtrigclean_restricted[iSDD]);
-  hEtrigclean_Array->Add(hEtrigclean[iSDD]);
-  hEtrigclean_restricted_Array->Add(hEtrigclean_restricted[iSDD]);
- }
-}
-hADCtrigclean_Array->Write("hADCtrigclean_Array",TObject::kSingleKey);
-hADCtrigclean_restricted_Array->Write("hADCtrigclean_restricted_Array",TObject::kSingleKey);
-hEtrigclean_Array->Write("hEtrigclean_Array",TObject::kSingleKey);
-hEtrigclean_restricted_Array->Write("hEtrigclean_restricted_Array",TObject::kSingleKey);
-
-hKAONShits->Write();
-hMIPShits->Write();
-hKAONStriggerhits->Write();
-hMIPStriggerhits->Write();
-
-htrigMIPShitsE->Write();
-htrigMIPShitsEall->Write();
-htrigKAONShitsE->Write();
-htrigKAONShitsEall->Write();
-htrigKAONShitsE_drift->Write();
-htrigKAONShitsEall_drift->Write();
-
 fout->Close();
 
 }

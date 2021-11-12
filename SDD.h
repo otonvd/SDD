@@ -100,6 +100,10 @@ bool IsSignal(int theadc);
  bool QuickCalib = false;
  bool IsCalib = false;
  TObjArray* CalibArray;
+
+ static const int nBUS = 6;//
+ static const int nSDD = 65; //last SDD #64
+
 };
 
 #endif
