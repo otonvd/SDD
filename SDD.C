@@ -379,12 +379,12 @@ for(int iBUS=0;iBUS<nBUS;iBUS++){
 TString* PFPeakName[nPFPeaks];
 TF1* fPeakFinder[nBUS][nSDD];
 TH1F* hPRECAL[nBUS][nSDD];
-TGraphErrors* gPRECAL[nBUS][nSDD];
-TGraphErrors* gPRECALLin[nBUS][nSDD];
-TGraph* gPRECALG[nBUS]; 
+TGraphErrors* gPRECAL_linfit[nBUS][nSDD];
+TGraphErrors* gPRECAL_linearity[nBUS][nSDD];
+TGraphErrors* gPRECALG[nBUS]; 
 TGraph* gPRECALG0[nBUS];
 for(int iBUS=0;iBUS<nBUS;iBUS++){
- gPRECALG[iBUS]= new TGraph();
+ gPRECALG[iBUS]= new TGraphErrors();
  gPRECALG[iBUS]->SetName(Form("gPRECALG_%i",iBUS));
  gPRECALG0[iBUS]= new TGraph();
  gPRECALG0[iBUS]->SetName(Form("gPRECALG0_%i",iBUS));
@@ -395,6 +395,7 @@ TSpectrum *spectrum = new TSpectrum(nPFPeaksMAX);
 TObjArray* fPeakFinderArray = new TObjArray();
 TObjArray* fPRECALArray = new TObjArray();
 TObjArray* hPRECALArray = new TObjArray();
+TObjArray* PRECALlinfitArray = new TObjArray();
 if(IsCalib){
  // Assumption for the PeakFinder peaks:  TiA - CuA - CuB
  //-------------------------------------------------------
@@ -673,19 +674,23 @@ if(IsCalib){
     }
  
     //Fit straight line to the peaks to get PRECAL calibration function
-    gPRECAL[iBUS][iSDD] = new TGraphErrors();
-    gPRECAL[iBUS][iSDD]->SetName(Form("gPRECAL_%i_%i",iBUS,iSDD));
+    gPRECAL_linfit[iBUS][iSDD] = new TGraphErrors();
+    gPRECAL_linfit[iBUS][iSDD]->SetName(Form("gPRECAL_linfit_%i_%i",iBUS,iSDD));
     for(int i=0;i<nPeaks;i++){
-     gPRECAL[iBUS][iSDD]->SetPoint(i, PeakE[i], fPre->GetParameter(iMean[i]) ); 
-     gPRECAL[iBUS][iSDD]->SetPointError(i, 0., fPre->GetParError(iMean[i])); 
+     gPRECAL_linfit[iBUS][iSDD]->SetPoint(i, PeakE[i], fPre->GetParameter(iMean[i]) ); 
+     gPRECAL_linfit[iBUS][iSDD]->SetPointError(i, 0., fPre->GetParError(iMean[i])); 
     }
     TF1* fline = new TF1("fline","pol1");
     fline->SetParameter(0, -1.*G0PF/GPF);//inital pars from peak finder
     fline->SetParameter(1, 1./GPF);//inital pars from peak finder
-    gPRECAL[iBUS][iSDD]->Fit(fline,"0");
+    gPRECAL_linfit[iBUS][iSDD]->Fit(fline,"0");
     float G0Pre = -1.*fline->GetParameter(0)/fline->GetParameter(1);
     float GPre = 1./fline->GetParameter(1);
+    float GPre_error = fline->GetParError(1)/pow(fline->GetParameter(1),2);
     cout<<endl<<" PRECALIBRATION COMPLETED: G0 = "<<G0Pre<<"    G = "<<GPre<<endl<<endl<<endl;
+    gPRECAL_linfit[iBUS][iSDD]->SetMarkerStyle(21);
+    PRECALlinfitArray->Add(gPRECAL_linfit[iBUS][iSDD]);
+    
  
     //PRECAL histograms and function:
     hPRECAL[iBUS][iSDD] = (TH1F*) thehisto->Clone(Form("hPRECAL_%i_%i",iBUS,iSDD));
@@ -697,14 +702,15 @@ if(IsCalib){
     fPRECALArray->Add(fPRECAL[iBUS][iSDD]);
     hPRECALArray->Add(hPRECAL[iBUS][iSDD]);
     //linearity plot:
-    gPRECALLin[iBUS][iSDD] = new TGraphErrors();
-    gPRECALLin[iBUS][iSDD]->SetName(Form("gPRECALLin_%i_%i",iBUS,iSDD));
+    gPRECAL_linearity[iBUS][iSDD] = new TGraphErrors();
+    gPRECAL_linearity[iBUS][iSDD]->SetName(Form("gPRECAL_linearity_%i_%i",iBUS,iSDD));
     for(int i=0;i<nPeaks;i++){
-     gPRECALLin[iBUS][iSDD]->SetPoint(i,PeakE[i],fPre->GetParameter(iMean[i])-fline->Eval(PeakE[i]));
-     gPRECALLin[iBUS][iSDD]->SetPointError(i,0.,fPre->GetParError(iMean[i]));
+     gPRECAL_linearity[iBUS][iSDD]->SetPoint(i,PeakE[i],fPre->GetParameter(iMean[i])-fline->Eval(PeakE[i]));
+     gPRECAL_linearity[iBUS][iSDD]->SetPointError(i,0.,fPre->GetParError(iMean[i]));
     }
     //G and G0 plots:
     gPRECALG[iBUS]->SetPoint(ipoint,iSDD,GPre);
+    gPRECALG[iBUS]->SetPointError(ipoint,0.,GPre_error);
     gPRECALG0[iBUS]->SetPoint(ipoint,iSDD,G0Pre);
     ipoint++;
  
@@ -717,7 +723,7 @@ if(IsCalib){
  
   }//sdd loop
  }//bus loop
- printf("\n %i NICELY CALIBRATED SDD's out of %i with stats, tol=%f\n\n",NgoodCal,NCalAttempt,InitTolerance*100);
+ printf("\n %i NICELY CALIBRATED SDD's out of %i with stats, tol=%f.0 percent\n\n",NgoodCal,NCalAttempt,InitTolerance*100);
 }//if(IsCalib)
 
 
@@ -790,9 +796,8 @@ CROSSTALK->Write("CROSSTALK",TObject::kSingleKey);
 //KT array
  fout->cd();
  ArrKT->Write("KaonTrigger",TObject::kSingleKey);
-
 if(IsCalib){
- //fPeakFinderArray->Write("PeakFinder_function",TObject::kSingleKey);
+ //PEAK FINDER ARRAY:
  TObjArray* PeakFinderArray = new TObjArray();
  for(int iBUS=0;iBUS<nBUS;iBUS++){
   gPeakFinderG[iBUS]->SetMarkerStyle(21);
@@ -801,9 +806,13 @@ if(IsCalib){
   PeakFinderArray->Add(gPeakFinderG0[iBUS]);
  }
  PeakFinderArray->Write("PeakFinder_G_G0",TObject::kSingleKey);
+ //PRECAL ARRAYS
  if(!QuickCalib){
-  //fPRECALArray->Write("PRECAL_function",TObject::kSingleKey);
+  //histos
   hPRECALArray->Write("PRECAL_histos",TObject::kSingleKey);
+  //linfit:
+  PRECALlinfitArray->Write("PRECAL_LinearFit",TObject::kSingleKey);
+  //G,G0
   TObjArray* PRECALArray = new TObjArray();
   for(int iBUS=0;iBUS<nBUS;iBUS++){
    gPRECALG[iBUS]->SetMarkerStyle(21);
