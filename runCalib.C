@@ -1,6 +1,6 @@
 //#include "SDD.h"
 
-void runCalib(char *filein ="20211111_1438_1111_1938_xray_25kv_20ua_tube1.root", int quick = 0)
+void runCalib(char *filein ="20211207_1452_1207_1525_xray_25kv_70ua_tube1.root", int quick = 0)
 
 
 

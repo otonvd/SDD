@@ -136,12 +136,12 @@ SDD::SDD(char *fn, char *fncalib){
    //=================
    cout<<" Calib File "<<sfilecalib.Data()<<endl;
    TFile *fcalib = new TFile(sfilecalib);
-   if(fcalib->GetListOfKeys()->Contains("fPreCalArray")){
+   if(fcalib->GetListOfKeys()->Contains("PRECAL_G_G0")){
     cout<<" Pre-Calibration found "<<endl;
-    CalibArray = (TObjArray*) fcalib->Get("fPreCalArray")->Clone("CalibArray");
-   }else if(fcalib->GetListOfKeys()->Contains("fPeakFinderArray")){
-    cout<<" Peak-Finder calibration found "<<endl;
-    CalibArray = (TObjArray*) fcalib->Get("fPeakFinderArray")->Clone("CalibArray");
+    CalibArray = (TObjArray*) fcalib->Get("PRECAL_G_G0")->Clone("CalibArray");
+// }else if(fcalib->GetListOfKeys()->Contains("PeakFinder_G_G0")){
+//  cout<<" Peak-Finder calibration found "<<endl;
+//  CalibArray = (TObjArray*) fcalib->Get("PeakFinder_G_G0")->Clone("CalibArray");
    }
   }
   string fout_post;
