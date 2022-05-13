@@ -7,6 +7,7 @@
 #include <TGraphErrors.h>
 #include <TCutG.h>
 #include <TFile.h>
+#include <TLine.h>
 #include <TSpectrum.h>
 #include <TLorentzVector.h>
 #include <TStyle.h>
@@ -94,9 +95,17 @@ TH1F* hKAONhits = new TH1F("hKAONhits","",6000,0,6000);
 TH1F* hMIPhits = new TH1F("hMIPhits","",6000,0,6000);
 TH1F* hKAONtriggerhits = new TH1F("hKAONtriggerhits","",10,0,10);
 TH1F* hMIPtriggerhits = new TH1F("hMIPtriggerhits","",10,0,10);
+TH1F* hDriftALL = new TH1F("hDriftALL","",1000,-33000,-31000);
+TH1F* hDriftTDC = new TH1F("hDriftTDC","",1000,-33000,-31000);
 TH1F* hDrift = new TH1F("hDrift","",1000,-33000,-31000);
+TH1F* hDriftPeak = new TH1F("hDriftPeak","",1000,-33000,-31000);
+TH1F* hDriftBkg = new TH1F("hDriftBkg","",1000,-33000,-31000);
 TH1F* hDriftUnzoom = new TH1F("hDriftUnzoom","",2000,-33000,33000);
+ hDriftALL->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+ hDriftTDC->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
  hDrift->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+ hDriftPeak->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
+ hDriftBkg->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
  hDriftUnzoom->GetXaxis()->SetTitle("Drift time (1 channel = 8.3e-3 #mus)");
 //Kaon trigger array:
 int nArrKT = 0;
@@ -108,8 +117,12 @@ ArrKT->Add(hKAONhits);
 ArrKT->Add(hMIPhits);
 ArrKT->Add(hKAONtriggerhits);
 ArrKT->Add(hMIPtriggerhits);
+ArrKT->Add(hDriftALL);
+ArrKT->Add(hDriftTDC);
 ArrKT->Add(hDrift);
 ArrKT->Add(hDriftUnzoom);
+ArrKT->Add(hDriftPeak);
+ArrKT->Add(hDriftBkg);
 
 
 
@@ -118,19 +131,16 @@ float xminE = 0.;
 float xmaxE = 24000.;
 int nbinsE = 1200;
 
-TH1F* hEsum = new TH1F("hEsum","",nbinsE,xminE,xmaxE);
+hEsum = new TH1F("hEsum","",nbinsE,xminE,xmaxE);
 hEsum->GetXaxis()->SetTitle("E (eV)");
 hEsum->SetLineColor(4);
 hEsum->SetLineWidth(2);
 
-TH1F* hEsum_trig=(TH1F*)hEsum->Clone("hEsum_trig");
-TH1F* hEgoodsum=(TH1F*)hEsum->Clone("hEgoodsum");
-TH1F* hEgoodsum_trig=(TH1F*)hEsum->Clone("hEgoodsum_trig");
+hEsum_trig=(TH1F*)hEsum->Clone("hEsum_trig");
+hEgoodsum=(TH1F*)hEsum->Clone("hEgoodsum");
+hEgoodsum_trig=(TH1F*)hEsum->Clone("hEgoodsum_trig");
+hEgoodsum_bkg=(TH1F*)hEsum->Clone("hEgoodsum_bkg");
 
-TH1F* hE[nBUS][nSDD]; // Calibrated energy spectrum
-TH1F* hEgood[nBUS][nSDD]; // Calibrated energy spectrum
-TH1F* hE_trig[nBUS][nSDD]; // Calibrated energy spectrum
-TH1F* hEgood_trig[nBUS][nSDD]; // Calibrated energy spectrum
 for(int iBUS=0;iBUS<nBUS;iBUS++){
  for(int iSDD=0;iSDD<nSDD;iSDD++){
   hE[iBUS][iSDD] = (TH1F*)hEsum->Clone(Form("hE_%i_%i",iBUS,iSDD));
@@ -145,6 +155,11 @@ for(int iBUS=0;iBUS<nBUS;iBUS++){
 //TObjArray* ArrhE_trig = new TObjArray();
 
 
+// (old: now done from input) DEFINE HERE WHICH DATA (TO SET TDC AND DRIFT TIME CUTS
+//-------------------------------------------------------
+//int WhichData = 0; // siddhartino
+//    WhichData = 1; // S2He
+
 
 //some variables definitions
 int preSDD,preADC,postSDD,postADC,theSDD,theADC,timediff,evdiff,t1,t2,iepbin,ratebin;
@@ -152,7 +167,42 @@ int iep,CPbin,oldCPbin,theBUS,preBUS;
 float CP;
 float PI = 3.14159265359;
 bool ISGOODtimediff,ISGOODevdiff,IsGOOD,goodhit;
-bool GoodCal[nBUS][nSDD] = {};
+float tmin,tmax,tminbkg,tmaxbkg,tdcmin1,tdcmax1,tdcmin2,tdcmax2;
+
+//DEFINE HERE TDC kaons window:
+//-----------------------------
+ tdcmin1 = 5900.; // siddhartino
+ tdcmax1 = 5955.; 
+ tdcmin2 = 6120.;
+ tdcmax2 = 6155.; 
+ if(WhichData==1){ //S2He (degrot475)
+  tdcmin1 = 5780.; 
+  tdcmax1 = 5880.; 
+  tdcmin2 = 6000.; 
+  tdcmax2 = 6090.; 
+ }else if(WhichData==2){ //S2He1,2,3 (degrot350,600,475again)
+  tdcmin1 = 5820.; 
+  tdcmax1 = 5900.; 
+  tdcmin2 = 6030.; 
+  tdcmax2 = 6120.; 
+ }else if(WhichData==3){ //S2He4 475again after trigger change
+  tdcmin1 = 5810.;
+  tdcmax1 = 5890.;
+  tdcmin2 = 6030.;
+  tdcmax2 = 6110.;
+ }
+
+//DEFINE HERE Drift time cut
+//--------------------------
+ tmin = -32580;// define drift time window best siddhartino
+ tmax = -32340;// 
+ if(WhichData==1 || WhichData==2 || WhichData==3){ //S2He (degrot475) || S2He1,2,3 (degrot350,600,475again) || S2He4 (475again after trigger change)
+  tmin = -32600;
+  tmax = -32460;
+ }
+ float twindow = tmax-tmin;
+ tminbkg = -32300;
+ tmaxbkg = tminbkg+twindow;
 
 //Sferas definition:
 //------------------
@@ -187,19 +237,27 @@ float UseG[nBUS][nSDD] = {};
 float UseG0[nBUS][nSDD] = {};
 TGraphErrors *gG;
 TGraph *gG0;
+TGraph *gIsGood;
 Double_t x,y;
 Int_t ix;
-float minG = 2.5; //definition of GoodCal
-float maxG = 4.5; //range of accepted gain for the SDD to be summed
+NGoodCal = 0;
+//float minG = 2.9; //definition of GoodCal                             => obsolete, decision is done now at calibration stage
+//float maxG = 3.9; //range of accepted gain for the SDD to be summed   => obsolete
+int nG = 3; //number of graphs in calb tobjarra, first:G, second:G0, third:IsGoodCal
 if(CalibArray->GetEntries()>0){ //DO WE HAVE A CALIBRATION LOADED?
  for(int iB=0;iB<nBUS;iB++){  // loop over buses
-  gG = (TGraphErrors*) CalibArray->At(iB*2+0);//first graph is G
-  gG0 = (TGraph*) CalibArray->At(iB*2+1);//second graph is G0
+  gG = (TGraphErrors*) CalibArray->At(iB*nG+0);//first graph is G
+  gG0 = (TGraph*) CalibArray->At(iB*nG+1);//second graph is G0
+  gIsGood = (TGraph*) CalibArray->At(iB*nG+2);//third:IsGoodCal
   for(int ip=0;ip<gG->GetN();ip++){  // loop over calibrated SDD's in this bus
    gG->GetPoint(ip,x,y);
    ix = (Int_t)x;
    UseG[iB][ix] = y;
-   if(UseG[iB][ix]>minG&&UseG[iB][ix]<maxG) GoodCal[iB][ix] = true;
+   //if(UseG[iB][ix]>minG&&UseG[iB][ix]<maxG) GoodCal[iB][ix] = true; //old obsolete
+     gIsGood->GetPoint(ip,x,y);
+     if(y==0)GoodCal[iB][ix] = false;
+     if(y==1)GoodCal[iB][ix] = true;
+     if(GoodCal[iB][ix]) NGoodCal++;
    gG0->GetPoint(ip,x,y);
    ix = (Int_t)x;
    UseG0[iB][ix] = y;
@@ -207,9 +265,8 @@ if(CalibArray->GetEntries()>0){ //DO WE HAVE A CALIBRATION LOADED?
   gG->Delete();
   gG0->Delete();
  }
- cout<<" CALIB LOADED"<<endl;
-}
-//calib loaded
+ cout<<endl<<" CALIB LOADED With # "<<NGoodCal<<" SDD's with Good Calibration"<<endl<<endl;
+}//calib loaded
 
 
 
@@ -219,13 +276,15 @@ if(CalibArray->GetEntries()>0){ //DO WE HAVE A CALIBRATION LOADED?
 if (fChain == 0) return;
 Long64_t nentries = fChain->GetEntriesFast();
 Long64_t nbytes = 0, nb = 0;
-cout<<" Nentries "<<nentries<<endl;
+cout<<"--> Nentries "<<nentries<<endl;
 for (Long64_t jentry=0; jentry<nentries;jentry++) {
 //for (Long64_t jentry=0; jentry<100;jentry++) {
  Long64_t ientry = LoadTree(jentry);
  if (ientry < 0) break;
  nb = fChain->GetEntry(jentry);   nbytes += nb;
  // if (Cut(ientry) < 0) continue;
+ if (jentry % 50000 == 0) cout <<"Reading entry "<<jentry<< endl;
+
 
  // !!! SKIP LOOP if nhits == 0  !!!!
  if(nhits<1) {
@@ -267,27 +326,32 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
  float ktrot = cos(PI/4)*(kt[0]+kt[1])+sin(PI/4)*(kt[2]+kt[3]);//x axis of 90deg rotation
  hktrot->Fill(ktrot);
 
- //DEFINE HERE TDC WINDOW:
- //=======================
+ // Decide here if it passes TDC kaons cut
+ //========================
  bool TDCkaons = false;
- if((ktrot>5880&&ktrot<5935)||(ktrot>6100&&ktrot<6155)) TDCkaons =true;//approx cuts from 20211210_1047_1212_0948_sum1
+ if((ktrot>tdcmin1&&ktrot<tdcmax1)||(ktrot>tdcmin2&&ktrot<tdcmax2)) TDCkaons =true;
+
  if(TDCkaons){
   hKAONhits->Fill(nhits);
  }else{
   hMIPhits->Fill(nhits);
  }
-
+ // Decide here if it passes Drift time window cut (and bkg)
+ //=================================================
 
  // --- HITS LOOP --- //
  //-------------------//
 
  int ntrig = 0;// number of trigger hits
  for (int ihit = 0;ihit<nhits;ihit++){
+  bool DriftPeak = false;
+  bool DriftBkg = false;
 
   //get bus, sdd and adc:
   theBUS=bus[ihit];
   theADC=adc[ihit];
   theSDD=sdd[ihit];
+
   //get pre hits:
   //-------------
   preBUS = -1; if(ihit>0) preBUS=bus[ihit-1];
@@ -342,14 +406,27 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
     hADCpreBAD[theBUS][theSDD]->Fill(theADC,preADC);
    }
    if(goodhit) hADCgood[theBUS][theSDD]->Fill(theADC);
-   
-   // --- TRIGGERED hits ADC --- //
-   //------------------------------
+
+   // --- TRIGGERED hits ADC and DRIFT TIME PLOTS --- //
+   //---------------------------------------------------
    if(trigg[ihit]==1){
     ntrig++;
     hADCtrig[theBUS][theSDD]->Fill(theADC);
-    hDrift->Fill(drift[ihit]);
-    hDriftUnzoom->Fill(drift[ihit]);
+    hDriftALL->Fill(drift[ihit]);
+
+    //here check if the drfit time is in the signal time window:
+    if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true; 
+    if(drift[ihit]>tminbkg&&drift[ihit]<tmaxbkg) DriftBkg = true; 
+
+    if(TDCkaons){
+     hDriftTDC->Fill(drift[ihit]);
+     if(GoodCal[theBUS][theSDD]&&goodhit) {  // VERY IMPORTANT: hDrift for goodcal and goodhit(no crosstalk) only hits!
+      hDrift->Fill(drift[ihit]); 
+      hDriftUnzoom->Fill(drift[ihit]);
+      if(DriftPeak) hDriftPeak->Fill(drift[ihit]);
+      if(DriftBkg) hDriftBkg->Fill(drift[ihit]);
+     }
+    }// if(TDCkaons) 
    }//end triggered hits
 
 
@@ -370,16 +447,15 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
     //              ----------
     }else{ // TRIGGERED:
 
-     //DEFINE HERE DriftTime window (only for triggered hits):
-     bool DriftPeak = false;
-     float tmin = -32580;//define drift time window
-     float tmax = -32400;//define drift time window
-     if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true; 
 
      //FOR THE MOMENT, triggered spectra includes cut in TDCkaons and DriftTime
      //FOR THE MOMENT, triggered spectra includes cut in TDCkaons and DriftTime
      //FOR THE MOMENT, triggered spectra includes cut in TDCkaons and DriftTime
      //FOR THE MOMENT, triggered spectra includes cut in TDCkaons and DriftTime
+
+//TDCkaons=true;//hack to include all triggered hits
+//DriftPeak=true;//hack to include all triggered hits
+
      if(TDCkaons&&DriftPeak){
       hE_trig[theBUS][theSDD]->Fill(theE);
       if(GoodCal[theBUS][theSDD]) hEsum_trig->Fill(theE);  
@@ -388,126 +464,78 @@ for (Long64_t jentry=0; jentry<nentries;jentry++) {
        if(GoodCal[theBUS][theSDD]) hEgoodsum_trig->Fill(theE);
       }
      }// FOR THE MOMENT, triggered spectra includes cut in TDCkaons and DriftTime
-
+     
+     //fill now also a bkg drift time window:
+     if(TDCkaons&&DriftBkg){
+      if(goodhit){
+       if(GoodCal[theBUS][theSDD]) hEgoodsum_bkg->Fill(theE);
+      }
+     }
+  
     }//end triggered
    }//we have calib
 
+
   }//if(preADC>0)  SKIP FOR NOW EVENTS WITH NO "PRE" HIT !!!
-/*
-     bool DriftPeak = false;
-     float tmin = -32580;//define drift time window
-     float tmax = -32375;//define drift time window
-     if(drift[ihit]>tmin&&drift[ihit]<tmax) DriftPeak = true;
-
-     //count hits:
-     bool goodE = false;
-     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) ) goodE = true;
-     bool goodEall = false;
-     if( (theE>2000&&theE<5000) || (theE>7000&&theE<14000) || (theE>18000&&theE<24000) ) goodEall = true;
-     if(TDCkaons){
-      if(goodE) htrigKAONShitsE->Fill(theSDD);
-      if(goodEall) htrigKAONShitsEall->Fill(theSDD);
-      if(DriftPeak){
-       if(goodE) htrigKAONShitsE_drift->Fill(theSDD);
-       if(goodEall) htrigKAONShitsEall_drift->Fill(theSDD);
-      }
-      hdrift_kaons->Fill(drift[ihit]);
-     }else{
-      if(goodE) htrigMIPShitsE->Fill(theSDD);
-      if(goodEall) htrigMIPShitsEall->Fill(theSDD);
-      hdrift_mips->Fill(drift[ihit]);
-     }
-
-     if(DriftPeak) hEsum_trig_peak->Fill(theE);
-     if(!DriftPeak) hEsum_trig_flat->Fill(theE);
-     if(TDCkaons){//good tdc
-      hEsum_trig_tdc->Fill(theE);
-      if(DriftPeak){
-       hEsum_trig_tdc_drift->Fill(theE);
-       hE_trig_tdc_drift[theSDD]->Fill(theE);
-       if(histoit) hEtrigclean[theSDD]->Fill(theE);
-       if(histoit_restricted) hEtrigclean_restricted[theSDD]->Fill(theE);
-       if((theSDD)<33){
-        hEsum_external_tdc_drift->Fill(theE);
-       }else{
-        hEsum_internal_tdc_drift->Fill(theE);
-       }
-       if((theSDD>=9&&theSDD<=16)||(theSDD>=25&&theSDD<=32) 
-       ||(theSDD>=41&&theSDD<=48)||(theSDD>=57&&theSDD<=64)){
-        hEsum_UP_tdc_drift->Fill(theE);
-       }else{
-        hEsum_DOWN_tdc_drift->Fill(theE);
-       }
-      }
-      //pre/post energy spectra 
-      for(int ipre=0;ipre<nprehits;ipre++){
-       if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
-        if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
-         float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
-         if(ipre==0) hEprepost1[theSDD]->Fill(preE);///these plots with NO drift time req
-         if(ipre<5) hEprepost5[theSDD]->Fill(preE);
-         if(ipre<10) hEprepost10[theSDD]->Fill(preE);
-         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
-          if(ipre==0) hEprepost1_drift[theSDD]->Fill(preE);
-          if(ipre<5) hEprepost5_drift[theSDD]->Fill(preE);
-          if(ipre<10) hEprepost10_drift[theSDD]->Fill(preE);
-         }
-        }
-       }
-      }//pre hits
-      for(int ipost=0;ipost<nposthits;ipost++){
-       if(UseG0[postSDDt[ipost]]!=0&&UseG[postSDDt[ipost]]!=0){//we have calib for this sdd
-        if(UseG[postSDDt[ipost]]>minG&&UseG[postSDDt[ipost]]<maxG){//the cal is good
-         float postE = UseG0[postSDDt[ipost]]+UseG[postSDDt[ipost]]*postADCt[ipost];
-         if(ipost==0) hEprepost1[theSDD]->Fill(postE);///these plots with NO drift time req
-         if(ipost<5) hEprepost5[theSDD]->Fill(postE);
-         if(ipost<10) hEprepost10[theSDD]->Fill(postE);
-         if((drift[ihit]>-32600&&drift[ihit]<-32375)){ //the same but WITH drift time req
-          if(ipost==0) hEprepost1_drift[theSDD]->Fill(postE);
-          if(ipost<5) hEprepost5_drift[theSDD]->Fill(postE);
-          if(ipost<10) hEprepost10_drift[theSDD]->Fill(postE);
-         }
-        }
-       }
-      }//post hits
-     }else{ //outside good tdc
-      hEsum_trig_mip->Fill(theE);
-      if((drift[ihit]>-32400)){
-       hEsum_trig_mip_nodrift->Fill(theE);
-      }
-      //pre/post energy spectra 
-      for(int ipre=0;ipre<nprehits;ipre++){
-       if(UseG0[preSDDt[ipre]]!=0&&UseG[preSDDt[ipre]]!=0){//we have calib for this sdd
-        if(UseG[preSDDt[ipre]]>minG&&UseG[preSDDt[ipre]]<maxG){//the cal is good
-         float preE = UseG0[preSDDt[ipre]]+UseG[preSDDt[ipre]]*preADCt[ipre];
-         if(ipre==0) hEprepost1_mips[theSDD]->Fill(preE);///these plots with NO drift time req
-         if(ipre<5) hEprepost5_mips[theSDD]->Fill(preE);
-         if(ipre<10) hEprepost10_mips[theSDD]->Fill(preE);
-        }
-       }
-      }//pre hits
-      for(int ipost=0;ipost<nposthits;ipost++){
-       if(UseG0[postSDDt[ipost]]!=0&&UseG[postSDDt[ipost]]!=0){//we have calib for this sdd
-        if(UseG[postSDDt[ipost]]>minG&&UseG[postSDDt[ipost]]<maxG){//the cal is good
-         float postE = UseG0[postSDDt[ipost]]+UseG[postSDDt[ipost]]*postADCt[ipost];
-         if(ipost==0) hEprepost1_mips[theSDD]->Fill(postE);///these plots with NO drift time req
-         if(ipost<5) hEprepost5_mips[theSDD]->Fill(postE);
-         if(ipost<10) hEprepost10_mips[theSDD]->Fill(postE);
-        }
-       }
-      }//post hits
-     }//tdc requirement
-     hEsumCP_trig->Fill(theE,CP);
-     hEdrift->Fill(theE,drift[ihit]); 
-    }
-   }//triggered
-  }//we have calib
-*/
-
-
 
  }//end ihit loop
+  
 }//jentry loop
+
+
+
+
+
+//---------------------------------------------------
+// ==> IN THE END...Give some numbers as output:
+//---------------------------------------------------
+
+ // # of kaons with TDC
+ Kint = 0.;
+ int ibin_tdcmin =  hktrot->FindBin(tdcmin1);
+ int ibin_tdcmax =  hktrot->FindBin(tdcmax1);
+ Kint  = Kint + hktrot->Integral(ibin_tdcmin,ibin_tdcmax);
+ ibin_tdcmin =  hktrot->FindBin(tdcmin2);
+ ibin_tdcmax =  hktrot->FindBin(tdcmax2);
+ Kint  = Kint + hktrot->Integral(ibin_tdcmin,ibin_tdcmax);
+ cout<<endl<<" TDC Kaon Peaks Integral (simpler) = "<<Kint<<endl;
+ TGraph* gTDCkaonsInt = new TGraph(); gTDCkaonsInt->SetName("gTDCkaonsInt");
+ gTDCkaonsInt->SetPoint(0,1,Kint);
+ //Integrate also drift time window:
+ float DTint = 0.;
+ DTint = hDriftPeak->Integral(1, hDriftPeak->GetNbinsX());
+ DTint = DTint - hDriftBkg->Integral(1, hDriftBkg->GetNbinsX());
+ cout<<" Drift Time Integral (bkg-subtracted) = "<<DTint<<endl;
+ TGraph* gDriftPeakInt = new TGraph(); gDriftPeakInt->SetName("gDriftPeakInt");
+ gDriftPeakInt->SetPoint(0,1,DTint);
+
+
+ //define signal region:
+ float Emin = 4000.;   // from 4-12 keV
+ float Emax = 12000.;  // from 4-12 keV
+
+ FUNCTION_NUMBERS();
+
+ //print
+ cout<<endl<<"# "<<NGoodCal<<" SDD's with GoodCalibration"<<endl;
+ cout<<"# "<<nSDDon<<" SDD's are ON"<<endl;
+ cout<<"# "<<nSDDGon<<" SDD's are with GoodCal and ON "<<endl;
+ TGraph* gSDDon = new TGraph();
+ gSDDon->SetName("gSDDon");
+ gSDDon->SetPoint(0,1,nSDDGon);// gSDDon filled with SDD's that are on (see criteria avobe) and goodcal!
+
+ cout<<endl<<"   DriftPeak ("<<tmin<<" to "<<tmax<<")  Entries = "<<hDriftPeak->GetEntries()<<endl;
+ cout<<"   DriftBkg ("<<tminbkg<<" to "<<tmaxbkg<<")  Entries = "<<hDriftBkg->GetEntries()<<endl;
+ //print it all
+ printf("\n Tot K4He Lalpha yield = %.1f, per SDD = %.1f\n",TotHeYield,HeYieldperSDD);
+ printf("                    /cm2 = %.1f\n",HeYieldpercm2);
+ printf("                 /cm2/MK = %.1f\n",HeYieldpercm2MK);
+ printf("               /cm2/pb-1 = %.1f\n\n",HeYieldpercm2pb);
+
+
+
+ 
+
 
 
 
@@ -601,19 +629,26 @@ TGraphErrors* gPRECAL_linfit[nBUS][nSDD];
 TGraphErrors* gPRECAL_linearity[nBUS][nSDD];
 TGraphErrors* gPRECALG[nBUS]; 
 TGraph* gPRECALG0[nBUS];
+TGraph* gIsGoodCal[nBUS];
 for(int iBUS=0;iBUS<nBUS;iBUS++){
  gPRECALG[iBUS]= new TGraphErrors();
  gPRECALG[iBUS]->SetName(Form("gPRECALG_%i",iBUS));
  gPRECALG0[iBUS]= new TGraph();
  gPRECALG0[iBUS]->SetName(Form("gPRECALG0_%i",iBUS));
+ gIsGoodCal[iBUS]= new TGraph();
+ gIsGoodCal[iBUS]->SetName(Form("gIsGoodCal_%i",iBUS));
 }
 int ipoint = 0;
 TF1* fPRECAL[nBUS][nSDD];
+int IsGoodCal[nBUS][nSDD] = {};
 TSpectrum *spectrum = new TSpectrum(nPFPeaksMAX);
 TObjArray* fPeakFinderArray = new TObjArray();
 TObjArray* fPRECALArray = new TObjArray();
 TObjArray* hPRECALArray = new TObjArray();
 TObjArray* PRECALlinfitArray = new TObjArray();
+
+//IsCalib = false; //hack to voluntarily skip calib
+
 if(IsCalib){
  // Assumption for the PeakFinder peaks:  TiA - CuA - CuB
  //-------------------------------------------------------
@@ -714,6 +749,7 @@ if(IsCalib){
  for(int iBUS=0;iBUS<nBUS;iBUS++){
   ipoint = 0;
   for(int iSDD=0;iSDD<nSDD;iSDD++){
+   IsGoodCal[iBUS][iSDD] = 0;
    TH1F* thehisto; 
    thehisto = (TH1F*) hADCgood[iBUS][iSDD]->Clone("thehisto");thehisto->SetName("thehisto");
    int minstatsForCalib = 1000;
@@ -813,10 +849,11 @@ if(IsCalib){
       if(GPF<maxgoodG&&GPF>mingoodG&&G0PF<maxgoodG0&&G0PF>mingoodG0&&TolerancePass){
        cout<<" -- TEST PASSED! --"<<endl<<endl; 
        TestPassed = true;
+       IsGoodCal[iBUS][iSDD] = 1; // there will be an additional request that the error in the prefit is below 1%, see IsGoodCal later in the prefit
        ipeak0 = i0;
        ipeak1 = i1;
        ipeak2 = i2;
-       NgoodCal++;
+       //NgoodCal++; // because of the additional request of error in the prefit below 1%, we now do this sum later
       }
       if(TestPassed) break;
      }
@@ -931,6 +968,10 @@ if(IsCalib){
     gPRECALG[iBUS]->SetPoint(ipoint,iSDD,GPre);
     gPRECALG[iBUS]->SetPointError(ipoint,0.,GPre_error);
     gPRECALG0[iBUS]->SetPoint(ipoint,iSDD,G0Pre);
+    //additional requirement to declare good cal, prefit error below 1%:
+    if(GPre_error/GPre>.01) IsGoodCal[iBUS][iSDD]=0.;
+    if(IsGoodCal[iBUS][iSDD]==1.) NgoodCal++;
+    gIsGoodCal[iBUS]->SetPoint(ipoint,iSDD,IsGoodCal[iBUS][iSDD]);
     ipoint++;
  
    //clean the mess
@@ -1036,8 +1077,10 @@ if(IsCalib){
   for(int iBUS=0;iBUS<nBUS;iBUS++){
    gPRECALG[iBUS]->SetMarkerStyle(21);
    gPRECALG0[iBUS]->SetMarkerStyle(21);
+   gIsGoodCal[iBUS]->SetMarkerStyle(25);
    PRECALArray->Add(gPRECALG[iBUS]);
    PRECALArray->Add(gPRECALG0[iBUS]);
+   PRECALArray->Add(gIsGoodCal[iBUS]);
   }
   PRECALArray->Write("PRECAL_G_G0",TObject::kSingleKey);
  }
@@ -1114,11 +1157,213 @@ if(!IsCalib){
  
  hEsum_trig->Write();
  hEgoodsum_trig->Write();
+ hEgoodsum_bkg->Write();
+ hpercm2->Write();
+ hpercm2MK->Write();
+ hpercm2pb->Write();
+
+TDirectory *Numbers = (TDirectory*)fout->mkdir("Numbers");Numbers->cd();
+ gSDDon->SetMarkerStyle(20);gSDDon->Write();
+ gTotHeYield->SetMarkerStyle(20);gTotHeYield->Write();
+ gHeYieldperSDD->SetMarkerStyle(20);gHeYieldperSDD->Write();
+ gTDCkaonsInt->SetMarkerStyle(20);gTDCkaonsInt->Write();
+ gDriftPeakInt->SetMarkerStyle(20);gDriftPeakInt->Write();
+ gHeYieldpercm2->SetMarkerStyle(20);gHeYieldpercm2->Write();
+ gHeYieldpercm2MK->SetMarkerStyle(20);gHeYieldpercm2MK->Write();
+ gHeYieldpercm2pb->SetMarkerStyle(20);gHeYieldpercm2pb->Write();
+
+fout->cd();
+ for(int i=0;i<nzones;i++) {
+  gINCL[i]->Write();
+  gTRIG[i]->Write();
+  gSIG[i]->Write();
+ }
 
 
+fout->cd();
 
 }//!IsCalib
 
 
 fout->Close();//close output file
+}
+
+//________________________
+void SDD::FUNCTION_NUMBERS(){
+
+ //define signal region:
+ float Emin = 4000.;   // from 4-12 keV
+ float Emax = 12000.;  // from 4-12 keV
+
+ //define integrals of INCL, trig spectrum and signal region for all SDD's:
+ nall = hEgoodsum->Integral( hEgoodsum->FindBin(Emin), hEgoodsum->FindBin(Emax));
+ ntrig = hEgoodsum_trig->Integral( hEgoodsum_trig->FindBin(Emin), hEgoodsum_trig->FindBin(Emax));
+ nbkg = hEgoodsum_bkg->Integral( hEgoodsum_bkg->FindBin(Emin), hEgoodsum_bkg->FindBin(Emax));
+
+ float EminkeV=Emin/1000.;
+ float EmaxkeV=Emax/1000.;
+ printf("\n INCLUSIVE hits (in %.0f-%.0fkeV) = %.0f\n",EminkeV,EmaxkeV,nall);
+ printf(" TRIGGER hits (%.0f-%.0fkeV) = %.0f\n",EminkeV,EmaxkeV,ntrig);
+ printf(" BKG window hits (%.0f-%.0fkeV) = %.0f\n\n",EminkeV,EmaxkeV,nbkg);
+
+ nSDDon=0;
+ nSDDGon=0;
+ float MAX = 5.* (1./((int)NGoodCal))  ; // max signal /sdd = 5 times what expected from #calibsdd
+ float MIN = (1./((int)NGoodCal)) /10. ; // min signal /sdd = /10 times what expected from #calibsdd
+ cout<<endl<<" MIN AND MAX for SDDon CRITERIUM : MIN="<<MIN<<"  MAX="<<MAX<<endl;
+ float minONentries = 10000.; // OLD! consider on with 10k entries in INCL spectrum
+ for(int iBUS=0;iBUS<nBUS;iBUS++){
+  for(int iSDD=0;iSDD<nSDD;iSDD++){
+   int binmin = hEgood[iBUS][iSDD]->FindBin(Emin);
+   int binmax = hEgood[iBUS][iSDD]->FindBin(Emax);
+   INCLint[iBUS][iSDD] = hEgood[iBUS][iSDD]->Integral(binmin,binmax);
+   TRIGint[iBUS][iSDD] = hEgood_trig[iBUS][iSDD]->Integral(binmin,binmax);
+     //CALCULATE NUMBER OF ON SDDs:
+         // OLD: just look at #hits in non trig spectrum
+         //if(INCLint[iBUS][iSDD]>minONentries) nSDDon++; 
+         //if(GoodCal[iBUS][iSDD]&&INCLint[iBUS][iSDD]>minONentries) nSDDGon++;
+     //NEW: #hits in incl. (and trig. spectrum?) between 5 and /10 times what expected from numer of calib sdds:
+//cout<<iBUS<<" "<<iSDD<<endl;
+//cout<<"inc "<<INCLint[iBUS][iSDD]<<" INCLint[iBUS][iSDD]/nall "<<INCLint[iBUS][iSDD]/nall<< endl;
+//cout<<"trig "<<TRIGint[iBUS][iSDD]<<" TRIGint[iBUS][iSDD]/ntrig "<<TRIGint[iBUS][iSDD]/ntrig<< endl;
+     if( INCLint[iBUS][iSDD]/nall > MIN && INCLint[iBUS][iSDD]/nall < MAX
+      //&&TRIGint[iBUS][iSDD]/ntrig > MIN && TRIGint[iBUS][iSDD]/ntrig < MAX
+      ) {
+      nSDDon++; 
+      if(GoodCal[iBUS][iSDD]) nSDDGon++; 
+     }
+  }
+ } 
+
+ // (quick) FIT K4He Lalpha
+ float xmin = 6100.;
+ float xmax = 7500.;
+ TF1* fheb = new TF1("fheb","gaus(0)+pol0(3)",xmin,xmax);
+ float xmean = 6470.;
+ fheb->SetParameter(0,hEgoodsum_trig->GetBinContent(hEgoodsum_trig->FindBin(xmean)));
+ fheb->SetParameter(1,xmean);
+ float xsigma = 110.;
+ fheb->SetParameter(2,xsigma);
+ float pol0 = hEgoodsum_trig->GetBinContent(hEgoodsum_trig->FindBin(xmin));
+ fheb->SetParameter(3,pol0);
+ hEgoodsum_trig->Fit(fheb,"R","",xmin,xmax);
+ TF1* fhe = new TF1("fhe","gaus",xmin,xmax);
+ fhe->SetParameter(0,fheb->GetParameter(0));
+ fhe->SetParameter(1,fheb->GetParameter(1));
+ fhe->SetParameter(2,fheb->GetParameter(2));
+ xmean = fheb->GetParameter(1);
+ xsigma = fheb->GetParameter(2);
+ pol0 = fheb->GetParameter(3);
+ float nsigmas = 3;
+ float xintmin = xmean-nsigmas*xsigma;
+ float xintmax = xmean+nsigmas*xsigma;
+ int ibinmin = hEgoodsum_trig->FindBin(xintmin);
+ int ibinmax = hEgoodsum_trig->FindBin(xintmax);
+ //OLD (takes signal as the integral of the gaussian):
+ // float TotHeYield = fhe->Integral(xintmin,xintmax)/hEgoodsum_trig->GetBinWidth(1);
+ //NEW, takes signal as the Integral of the histo minus the integral of the bkg
+  TotHeYield = hEgoodsum_trig->Integral(ibinmin,ibinmax);
+  bkgint= (ibinmax-ibinmin+1)*pol0;
+  TotHeYield = TotHeYield-bkgint;
+  //here save also total signal region without bkg subutr (nsig) and tha same for each sdd:
+  nsig = hEgoodsum_trig->Integral(ibinmin,ibinmax); 
+  for(int iBUS=0;iBUS<nBUS;iBUS++){
+   for(int iSDD=0;iSDD<nSDD;iSDD++){
+    SIGint[iBUS][iSDD] = hEgood_trig[iBUS][iSDD]->Integral(ibinmin,ibinmax);
+   }
+  }
+ HeYieldperSDD = TotHeYield/((float)nSDDGon);
+ SDDcm2 = 0.64;
+ HeYieldpercm2 = TotHeYield/(((float)nSDDGon)*SDDcm2);
+ gTotHeYield = new TGraph(); gTotHeYield->SetName("gTotHeYield");
+ gTotHeYield->SetPoint(0,1,TotHeYield);
+ gHeYieldperSDD = new TGraph(); gHeYieldperSDD->SetName("gHeYieldperSDD");
+ gHeYieldperSDD->SetPoint(0,1,HeYieldperSDD);
+ //create also histo per cm2:
+ hpercm2 = (TH1F*) hEgoodsum_trig->Clone("hpercm2");
+ hpercm2->GetYaxis()->SetTitle("Xrays/cm2");
+ hpercm2->Scale(1./(((float)nSDDGon)*SDDcm2));
+ gHeYieldpercm2 = new TGraph(); gHeYieldpercm2->SetName("gHeYieldpercm2");
+ gHeYieldpercm2->SetPoint(0,1,HeYieldpercm2);
+ //create also histo per cm2 per 10^6 Kaons(from TDC spectrum)
+ MK = Kint/1e6;
+ hpercm2MK = (TH1F*) hpercm2->Clone("hpercm2MK");
+ hpercm2MK->GetYaxis()->SetTitle("Xrays/cm2/MK");
+ hpercm2MK->Scale(1./MK);
+ HeYieldpercm2MK = HeYieldpercm2/MK;
+ gHeYieldpercm2MK = new TGraph(); gHeYieldpercm2MK->SetName("gHeYieldpercm2MK");
+ gHeYieldpercm2MK->SetPoint(0,1,HeYieldpercm2MK);
+ //create also histo per cm2 per pb-1(from luminosity input in run.C)
+ hpercm2pb = (TH1F*) hpercm2->Clone("hpercm2pb");
+ hpercm2pb->GetYaxis()->SetTitle("Xrays/cm2/pb-1");
+ hpercm2pb->Scale(1./Luminositypb);
+ HeYieldpercm2pb = HeYieldpercm2/Luminositypb;
+ gHeYieldpercm2pb = new TGraph(); gHeYieldpercm2pb->SetName("gHeYieldpercm2pb");
+ gHeYieldpercm2pb->SetPoint(0,1,HeYieldpercm2pb);
+
+ //==> Graphs for INCLUSIVE, triggered spectrum, estimation of signal in function of the position of the SDD:
+ for(int i=0;i<nzones;i++) {
+  gINCL[i] = new TGraphErrors();gINCL[i]->SetName(Form("gINCL%i",i));
+  gINCL[i]->SetMarkerStyle(21);
+  gTRIG[i] = new TGraphErrors();gTRIG[i]->SetName(Form("gTRIG%i",i));
+  gTRIG[i]->SetMarkerStyle(21);
+  gTRIG[i]->SetLineColor(4);
+  gTRIG[i]->SetMarkerColor(4);
+  gSIG[i] = new TGraphErrors();gSIG[i]->SetName(Form("gSIG%i",i));
+  gSIG[i]->SetMarkerStyle(21);
+  gSIG[i]->SetLineColor(2);
+  gSIG[i]->SetMarkerColor(2);
+ }
+ //calc percent of total:
+float sumINCL[nzones] = {};
+float nsddINCL[nzones] = {};
+float sumTRIG[nzones] = {};
+float sumSIG[nzones] = {};
+ for(int iBUS=0;iBUS<nBUS;iBUS++){
+  for(int iSDD=0;iSDD<nSDD;iSDD++){
+   int iwhere = where(iBUS,iSDD);
+   int iSDDlocal = iBUS*100+iSDD;
+   if(INCLint[iBUS][iSDD]>=100.) {
+    gINCL[iwhere]->SetPoint( gINCL[iwhere]->GetN(), iSDDlocal , INCLint[iBUS][iSDD]/nall);
+    sumINCL[iwhere] += INCLint[iBUS][iSDD];
+    nsddINCL[iwhere]++;
+    gTRIG[iwhere]->SetPoint( gTRIG[iwhere]->GetN(), iSDDlocal , TRIGint[iBUS][iSDD]/ntrig);
+    sumTRIG[iwhere] += TRIGint[iBUS][iSDD];
+    gSIG[iwhere]->SetPoint( gSIG[iwhere]->GetN(), iSDDlocal , SIGint[iBUS][iSDD]/nsig);
+    sumSIG[iwhere] += SIGint[iBUS][iSDD];
+   }
+  }
+ } 
+ float lmin = 190.;
+ float lmax = 680.;
+ for(int i=0;i<nzones;i++){
+  sumINCL[i] = sumINCL[i] / nsddINCL[i] / nall;
+  lINCL[i] = new TLine(lmin , sumINCL[i] ,lmax , sumINCL[i]);
+  sumTRIG[i] = sumTRIG[i] / nsddINCL[i] / ntrig;
+  lTRIG[i] = new TLine(lmin , sumTRIG[i] ,lmax , sumTRIG[i]);
+  sumSIG[i] = sumSIG[i] / nsddINCL[i] / nsig;
+  lSIG[i] = new TLine(lmin , sumSIG[i] ,lmax , sumSIG[i]);
+ }
+
+TCanvas* c2 = new TCanvas("c2");
+c2->Divide(2,3);
+ for(int i=0;i<nzones;i++){ 
+
+gINCL[i]->GetYaxis()->SetRangeUser(0.,0.01);
+gINCL[i]->GetXaxis()->SetRangeUser(lmin,lmax);
+
+if(i<3){ c2->cd(i*2+1);}else{ c2->cd((i-3)*2+2);  };
+
+gINCL[i]->Draw("");
+lINCL[i]->Draw("same");
+gTRIG[i]->Draw("Psame");
+lTRIG[i]->SetLineColor(4);
+lTRIG[i]->Draw("same");
+gSIG[i]->Draw("Psame");
+lSIG[i]->SetLineColor(2);
+lSIG[i]->Draw("same");
+}
+
+
+ 
 }

@@ -15,6 +15,8 @@
 #include <TH2.h>
 #include <TChain.h>
 #include <TFile.h>
+#include <TLine.h>
+#include <TGraphErrors.h>
 
 
 
@@ -64,7 +66,7 @@ public :
    TBranch        *b_dum;   //!
 
    //SDD(TTree *tree=0);
-   SDD(char *fn, char *fncalib);
+   SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb);
    virtual ~SDD();
    virtual Int_t    Cut(Long64_t entry);
    virtual Int_t    GetEntry(Long64_t entry);
@@ -75,6 +77,7 @@ public :
    virtual void     SetQuick();
    virtual Bool_t   Notify();
    virtual void     Show(Long64_t entry = -1);
+virtual void FUNCTION_NUMBERS();
    
 
 //additional functions go here:
@@ -82,10 +85,7 @@ public :
 private:
 bool ThereIsPost(UShort_t thesdd, Short_t theadc, int postsdd,int postadc,int rmin=99999, int rmax=-99999, int totmin =-99999);
 bool ThereIsPre(UShort_t thesdd, Short_t theadc, int presdd,int preadc,int rmin=99999, int rmax=-99999, int totmin=-99999 );
-bool IsInBus(int thesdd, int thebus);
-bool IsGood(int theadc, int preadc);
-bool IsSignal(int theadc);
-
+int where(int thebus, int thesdd); //position boost/antiboost, low/mid/up
 
 //additional variables go here:
 //-----------------------------
@@ -99,10 +99,50 @@ bool IsSignal(int theadc);
  TString sfileout;
  bool QuickCalib = false;
  bool IsCalib = false;
+ int WhichData = 1; // 0=siddhartino, 1=S2He
+ float Luminositypb = 99999.; // absurd intialization
  TObjArray* CalibArray;
 
- static const int nBUS = 6;//
+ static const int nBUS = 7;//
  static const int nSDD = 65; //last SDD #64
+
+ //DEFINITION OF HISTOGRAMS and other
+ TH1F* hEsum;
+ TH1F* hEsum_trig;
+ TH1F* hEgoodsum;
+ TH1F* hEgoodsum_trig;
+ TH1F* hEgoodsum_bkg;
+ TH1F* hE[nBUS][nSDD]; // Calibrated energy spectrum
+ TH1F* hEgood[nBUS][nSDD]; // Calibrated energy spectrum
+ TH1F* hE_trig[nBUS][nSDD]; // Calibrated energy spectrum
+ TH1F* hEgood_trig[nBUS][nSDD]; // Calibrated energy spectrum
+
+ bool GoodCal[nBUS][nSDD] = {};
+
+ // DEFINITION OF GRAPHS AND OTHER FOR FUNCTION-LIKE CODE:
+ float nall,ntrig,nbkg,nsig;
+ int nSDDon, nSDDGon, NGoodCal;
+ float HeYieldperSDD,SDDcm2,HeYieldpercm2,TotHeYield,bkgint,Kint;
+ TGraph* gTotHeYield;
+ TGraph* gHeYieldperSDD;
+ TH1F* hpercm2;
+ TGraph* gHeYieldpercm2;
+ float MK, HeYieldpercm2MK, HeYieldpercm2pb;
+ TH1F* hpercm2MK;
+ TGraph* gHeYieldpercm2MK;
+ TH1F* hpercm2pb;
+ TGraph* gHeYieldpercm2pb;
+ float INCLint[nBUS][nSDD] = {};
+ float TRIGint[nBUS][nSDD] = {};
+ float SIGint[nBUS][nSDD] = {};
+ static const int nzones = 6; 
+ TGraphErrors* gINCL[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST 
+ TGraphErrors* gTRIG[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST 
+ TGraphErrors* gSIG[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST
+ TLine* lINCL[nzones]; 
+ TLine* lTRIG[nzones]; 
+ TLine* lSIG[nzones]; 
+
 
 };
 
@@ -115,7 +155,7 @@ bool IsSignal(int theadc);
 //   if (tree == 0) {
 //      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("20200117_1240_0117_1414_sf1sf3_Dafne+xray_bottom_25kv_100ua.root");
 //      if (!f || !f->IsOpen()) {
-SDD::SDD(char *fn, char *fncalib){
+SDD::SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb ){
   TTree *tree = 0;
 //  sfilein = (TString) fn;
 //  sfilecalib = (TString) fncalib;
@@ -153,6 +193,9 @@ SDD::SDD(char *fn, char *fncalib){
   TFile *f = new TFile(sfilein);
   f->GetObject("ft10",tree);
   Init(tree);
+  //at the end set WhichData and Luminosity too:
+  WhichData = fWhichData;
+  if(fLuminositypb>0.&&fLuminositypb<99999.) Luminositypb = fLuminositypb;
 }
 
 SDD::~SDD()
@@ -250,4 +293,58 @@ void SDD::SetQuick(){
  if(QuickCalib)cout<<endl<<"  QuickCalib-> Only quick calib with Peak finder"<<endl<<endl;
  return;
 }
+
+
+
+int SDD::where(int thebus, int thesdd){
+ //position boost/antiboost, low/mid/up
+   bool isboost = 0;
+   if(thebus>3) isboost = 1;
+   int lmu = 0 ;//0=low, 1=mid, 2=up
+   if(thesdd==2) lmu=1;
+   if(thesdd==8) lmu=1;
+   if(thesdd==18) lmu=1;
+   if(thesdd==24) lmu=1;
+   if(thesdd==34) lmu=1;
+   if(thesdd==40) lmu=1;
+   if(thesdd==50) lmu=1;
+   if(thesdd==56) lmu=1;
+   if(thesdd==9) lmu=1;
+   if(thesdd==15) lmu=1;
+   if(thesdd==25) lmu=1;
+   if(thesdd==31) lmu=1;
+   if(thesdd==41) lmu=1;
+   if(thesdd==47) lmu=1;
+   if(thesdd==57) lmu=1;
+   if(thesdd==63) lmu=1;
+   if(thesdd==18) lmu=1;
+   if(thesdd==12) lmu=2;
+   if(thesdd==13) lmu=2;
+   if(thesdd==28) lmu=2;
+   if(thesdd==29) lmu=2;
+   if(thesdd==44) lmu=2;
+   if(thesdd==45) lmu=2;
+   if(thesdd==60) lmu=2;
+   if(thesdd==61) lmu=2;
+   if(thesdd==11) lmu=2;
+   if(thesdd==14) lmu=2;
+   if(thesdd==27) lmu=2;
+   if(thesdd==30) lmu=2;
+   if(thesdd==43) lmu=2;
+   if(thesdd==46) lmu=2;
+   if(thesdd==59) lmu=2;
+   if(thesdd==62) lmu=2;
+   if(thesdd==10) lmu=2;
+   if(thesdd==16) lmu=2;
+   if(thesdd==26) lmu=2;
+   if(thesdd==62) lmu=2;
+   if(thesdd==42) lmu=2;
+   if(thesdd==48) lmu=2;
+   if(thesdd==58) lmu=2;
+   if(thesdd==64) lmu=2;
+   if(!isboost) lmu= lmu+3;// 012 lowmidup boost, 345 lowmidup antiboost
+   return  lmu;
+}
+
+
 #endif // #ifdef SDD_cxx
