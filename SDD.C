@@ -274,7 +274,7 @@ if(CalibArray->GetEntries()>0){ //DO WE HAVE A CALIBRATION LOADED?
 //______________________________________________________________________________________________//
 
 if (fChain == 0) return;
-Long64_t nentries = fChain->GetEntriesFast();
+Long64_t nentries = fChain->GetEntries();
 Long64_t nbytes = 0, nb = 0;
 cout<<"--> Nentries "<<nentries<<endl;
 for (Long64_t jentry=0; jentry<nentries;jentry++) {
@@ -1172,11 +1172,18 @@ TDirectory *Numbers = (TDirectory*)fout->mkdir("Numbers");Numbers->cd();
  gHeYieldpercm2MK->SetMarkerStyle(20);gHeYieldpercm2MK->Write();
  gHeYieldpercm2pb->SetMarkerStyle(20);gHeYieldpercm2pb->Write();
 
-fout->cd();
+ fout->cd();
+ TDirectory *ZONES = (TDirectory*)fout->mkdir("ZONES");ZONES->cd();
  for(int i=0;i<nzones;i++) {
+  lINCL[i]->Write();
+  lTRIG[i]->Write();
+  lSIG[i]->Write();
   gINCL[i]->Write();
   gTRIG[i]->Write();
   gSIG[i]->Write();
+  gINCLbad[i]->Write();
+  gTRIGbad[i]->Write();
+  gSIGbad[i]->Write();
  }
 
 
@@ -1208,12 +1215,13 @@ void SDD::FUNCTION_NUMBERS(){
 
  nSDDon=0;
  nSDDGon=0;
- float MAX = 5.* (1./((int)NGoodCal))  ; // max signal /sdd = 5 times what expected from #calibsdd
- float MIN = (1./((int)NGoodCal)) /10. ; // min signal /sdd = /10 times what expected from #calibsdd
+ float MAX = 5.* (1./((int)NGoodCal))  ; // max signal/sdd  x5 times what expected from #calibsdd
+ float MIN = (1./((int)NGoodCal)) /5. ; // min signal/sdd  /5 times what expected from #calibsdd
  cout<<endl<<" MIN AND MAX for SDDon CRITERIUM : MIN="<<MIN<<"  MAX="<<MAX<<endl;
  float minONentries = 10000.; // OLD! consider on with 10k entries in INCL spectrum
  for(int iBUS=0;iBUS<nBUS;iBUS++){
   for(int iSDD=0;iSDD<nSDD;iSDD++){
+   IsGoodSDD[iBUS][iSDD] = false;
    int binmin = hEgood[iBUS][iSDD]->FindBin(Emin);
    int binmax = hEgood[iBUS][iSDD]->FindBin(Emax);
    INCLint[iBUS][iSDD] = hEgood[iBUS][iSDD]->Integral(binmin,binmax);
@@ -1230,7 +1238,10 @@ void SDD::FUNCTION_NUMBERS(){
       //&&TRIGint[iBUS][iSDD]/ntrig > MIN && TRIGint[iBUS][iSDD]/ntrig < MAX
       ) {
       nSDDon++; 
-      if(GoodCal[iBUS][iSDD]) nSDDGon++; 
+      if(GoodCal[iBUS][iSDD]) {
+       IsGoodSDD[iBUS][iSDD] = true;
+       nSDDGon++; 
+      }
      }
   }
  } 
@@ -1305,16 +1316,24 @@ void SDD::FUNCTION_NUMBERS(){
  for(int i=0;i<nzones;i++) {
   gINCL[i] = new TGraphErrors();gINCL[i]->SetName(Form("gINCL%i",i));
   gINCL[i]->SetMarkerStyle(21);
-  gTRIG[i] = new TGraphErrors();gTRIG[i]->SetName(Form("gTRIG%i",i));
-  gTRIG[i]->SetMarkerStyle(21);
+  gTRIG[i] = (TGraphErrors*)gINCL[i]->Clone(Form("gTRIG%i",i));
   gTRIG[i]->SetLineColor(4);
   gTRIG[i]->SetMarkerColor(4);
-  gSIG[i] = new TGraphErrors();gSIG[i]->SetName(Form("gSIG%i",i));
-  gSIG[i]->SetMarkerStyle(21);
+  gSIG[i] = (TGraphErrors*)gINCL[i]->Clone(Form("gSIG%i",i));
   gSIG[i]->SetLineColor(2);
   gSIG[i]->SetMarkerColor(2);
+  gINCLbad[i] = (TGraphErrors*)gINCL[i]->Clone(Form("gINCLbad%i",i));
+  gINCLbad[i]->SetMarkerStyle(25);
+  gTRIGbad[i] = (TGraphErrors*)gTRIG[i]->Clone(Form("gTRIGbad%i",i));
+  gTRIGbad[i]->SetMarkerStyle(25);
+  gSIGbad[i] = (TGraphErrors*)gSIG[i]->Clone(Form("gSIGbad%i",i));
+  gSIGbad[i]->SetMarkerStyle(25);
+  lINCL[i] = new TGraph();lINCL[i]->SetName(Form("lINCL%i",i));
+  lTRIG[i] = new TGraph();lTRIG[i]->SetName(Form("lTRIG%i",i));
+  lSIG[i] = new TGraph();lSIG[i]->SetName(Form("lSIG%i",i));
+
  }
- //calc percent of total:
+//PERCENT: Signal of SDD/ total signal:
 float sumINCL[nzones] = {};
 float nsddINCL[nzones] = {};
 float sumTRIG[nzones] = {};
@@ -1323,45 +1342,73 @@ float sumSIG[nzones] = {};
   for(int iSDD=0;iSDD<nSDD;iSDD++){
    int iwhere = where(iBUS,iSDD);
    int iSDDlocal = iBUS*100+iSDD;
-   if(INCLint[iBUS][iSDD]>=100.) {
-    gINCL[iwhere]->SetPoint( gINCL[iwhere]->GetN(), iSDDlocal , INCLint[iBUS][iSDD]/nall);
-    sumINCL[iwhere] += INCLint[iBUS][iSDD];
-    nsddINCL[iwhere]++;
-    gTRIG[iwhere]->SetPoint( gTRIG[iwhere]->GetN(), iSDDlocal , TRIGint[iBUS][iSDD]/ntrig);
-    sumTRIG[iwhere] += TRIGint[iBUS][iSDD];
-    gSIG[iwhere]->SetPoint( gSIG[iwhere]->GetN(), iSDDlocal , SIGint[iBUS][iSDD]/nsig);
-    sumSIG[iwhere] += SIGint[iBUS][iSDD];
+   if(IsGoodSDD[iBUS][iSDD]){
+//    if(INCLint[iBUS][iSDD]>=100.) {
+     gINCL[iwhere]->SetPoint( gINCL[iwhere]->GetN(), iSDDlocal , INCLint[iBUS][iSDD]/nall);
+     sumINCL[iwhere] += INCLint[iBUS][iSDD];
+     nsddINCL[iwhere]++;
+     gTRIG[iwhere]->SetPoint( gTRIG[iwhere]->GetN(), iSDDlocal , TRIGint[iBUS][iSDD]/ntrig);
+     sumTRIG[iwhere] += TRIGint[iBUS][iSDD];
+     gSIG[iwhere]->SetPoint( gSIG[iwhere]->GetN(), iSDDlocal , SIGint[iBUS][iSDD]/nsig);
+     sumSIG[iwhere] += SIGint[iBUS][iSDD];
+//    }
+  }else{
+     gINCLbad[iwhere]->SetPoint( gINCLbad[iwhere]->GetN(), iSDDlocal , INCLint[iBUS][iSDD]/nall);
+     gTRIGbad[iwhere]->SetPoint( gTRIGbad[iwhere]->GetN(), iSDDlocal , TRIGint[iBUS][iSDD]/ntrig);
+     gSIGbad[iwhere]->SetPoint( gSIGbad[iwhere]->GetN(), iSDDlocal , SIGint[iBUS][iSDD]/nsig);
    }
   }
  } 
- float lmin = 190.;
- float lmax = 680.;
+//EXPECTED PERCENT: Signal of ZONE/ nSDD in ZONE / total signal:
+//  This expected signal is a graph with two points to cover from 0 to XXXX (max #SDD per zone)
+ float lmin = 80;
+ float lmax = 680;
+
  for(int i=0;i<nzones;i++){
+  //if(i>2) lmin = 80;
+  //if(i>2) lmax = 380;
   sumINCL[i] = sumINCL[i] / nsddINCL[i] / nall;
-  lINCL[i] = new TLine(lmin , sumINCL[i] ,lmax , sumINCL[i]);
+  lINCL[i]->SetPoint(0,lmin,sumINCL[i]);
+  lINCL[i]->SetPoint(1,lmax,sumINCL[i]);
+  lINCL[i]->SetMarkerStyle(29);
+  lINCL[i]->SetLineWidth(2);
   sumTRIG[i] = sumTRIG[i] / nsddINCL[i] / ntrig;
-  lTRIG[i] = new TLine(lmin , sumTRIG[i] ,lmax , sumTRIG[i]);
+  lTRIG[i]->SetPoint(0,lmin,sumTRIG[i]);
+  lTRIG[i]->SetPoint(1,lmax,sumTRIG[i]);
+  lTRIG[i]->SetLineColor(4);
+  lTRIG[i]->SetMarkerColor(4);
+  lTRIG[i]->SetMarkerStyle(29);
+  lTRIG[i]->SetLineWidth(2);
   sumSIG[i] = sumSIG[i] / nsddINCL[i] / nsig;
-  lSIG[i] = new TLine(lmin , sumSIG[i] ,lmax , sumSIG[i]);
+  lSIG[i]->SetPoint(0,lmin,sumSIG[i]);
+  lSIG[i]->SetPoint(1,lmax,sumSIG[i]);
+  lSIG[i]->SetLineColor(2);
+  lSIG[i]->SetMarkerColor(2);
+  lSIG[i]->SetMarkerStyle(29);
+  lSIG[i]->SetLineWidth(2);
  }
 
 TCanvas* c2 = new TCanvas("c2");
 c2->Divide(2,3);
  for(int i=0;i<nzones;i++){ 
 
-gINCL[i]->GetYaxis()->SetRangeUser(0.,0.01);
-gINCL[i]->GetXaxis()->SetRangeUser(lmin,lmax);
+lINCL[i]->GetYaxis()->SetRangeUser(0.,0.01);
 
+//draw left boost side, right antiboost side
 if(i<3){ c2->cd(i*2+1);}else{ c2->cd((i-3)*2+2);  };
 
-gINCL[i]->Draw("");
-lINCL[i]->Draw("same");
+lINCL[i]->Draw("APL");
+
+lTRIG[i]->Draw("PLsame");
+lSIG[i]->Draw("PLsame");
+
+gINCL[i]->Draw("Psame");
 gTRIG[i]->Draw("Psame");
-lTRIG[i]->SetLineColor(4);
-lTRIG[i]->Draw("same");
 gSIG[i]->Draw("Psame");
-lSIG[i]->SetLineColor(2);
-lSIG[i]->Draw("same");
+
+gINCLbad[i]->Draw("Psame");
+gTRIGbad[i]->Draw("Psame");
+gSIGbad[i]->Draw("Psame");
 }
 
 

@@ -149,8 +149,31 @@ void results(){
  file[nfiles] = TFile::Open("foutSDD_S2He3_1-2.root");
  whichData[nfiles] = 2;
  lum[nfiles] = 6.503;
- deg[nfiles] = 475+10;//add file to be visible in graphic
+ deg[nfiles] = 475+10;//add file to be visible in graphic before trigger change
  nfiles++;
+
+
+// Diana
+ file[nfiles] = TFile::Open("foutSDD_S2He4_d2_at.root");
+ whichData[nfiles] = 2;
+ lum[nfiles] = 8.3;
+ deg[nfiles] = 475+20;//add file to be visible in graphic after trigger change
+ nfiles++;
+
+
+//file[nfiles] = TFile::Open("foutSDD_S2He4_d4_t2cm.root");
+ //whichData[nfiles] = 2;
+// lum[nfiles] = 2.634;
+ //deg[nfiles] = 475+30;//add file to be visible in graphic after trigger changed and moved 2 cm boost direction
+// nfiles++;
+
+
+file[nfiles] = TFile::Open("foutSDD_S2He4_d6_t2cm.root");
+ whichData[nfiles] = 2;
+ lum[nfiles] = 8.028;
+ deg[nfiles] = 475+30;//add file to be visible in graphic after trigger changed and moved 2 cm boost direction
+ nfiles++;
+
  //----------------------------------------
 
 
@@ -222,6 +245,8 @@ void results(){
  c1->cd(9);
  gSB_deg->Draw("AP");
 
+ TCanvas* c2 = new TCanvas();
+gSpb->Draw("");
 }
 
 
@@ -316,5 +341,6 @@ void FillSignal(int ii){
  Signal[ii] = hS->Integral(ibinmin,ibinmax);
  Bkg[ii] = (ibinmax-ibinmin+1)*pol0;
  Signal[ii] = Signal[ii]-Bkg[ii];
+cout<<" Signal"<< Signal[ii]<<endl;
  return;
 }

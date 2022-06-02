@@ -66,7 +66,9 @@ public :
    TBranch        *b_dum;   //!
 
    //SDD(TTree *tree=0);
-   SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb);
+   //SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb);
+   SDD(TChain* inputChain, const char *fn,const char *fncalib, int fWhichData, float fLuminositypb);
+
    virtual ~SDD();
    virtual Int_t    Cut(Long64_t entry);
    virtual Int_t    GetEntry(Long64_t entry);
@@ -132,16 +134,20 @@ int where(int thebus, int thesdd); //position boost/antiboost, low/mid/up
  TGraph* gHeYieldpercm2MK;
  TH1F* hpercm2pb;
  TGraph* gHeYieldpercm2pb;
+ bool IsGoodSDD[nBUS][nSDD];
  float INCLint[nBUS][nSDD] = {};
  float TRIGint[nBUS][nSDD] = {};
  float SIGint[nBUS][nSDD] = {};
  static const int nzones = 6; 
  TGraphErrors* gINCL[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST 
+ TGraphErrors* gINCLbad[nzones];  // for bad sdds
  TGraphErrors* gTRIG[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST 
+ TGraphErrors* gTRIGbad[nzones];  // for bad sdds
  TGraphErrors* gSIG[nzones];  // 0,1,2= low,mid,up BOOST, 3,4,5=low,mid,up ANTIBOOST
- TLine* lINCL[nzones]; 
- TLine* lTRIG[nzones]; 
- TLine* lSIG[nzones]; 
+ TGraphErrors* gSIGbad[nzones];  // for bad sdds
+ TGraph* lINCL[nzones]; 
+ TGraph* lTRIG[nzones]; 
+ TGraph* lSIG[nzones]; 
 
 
 };
@@ -155,7 +161,9 @@ int where(int thebus, int thesdd); //position boost/antiboost, low/mid/up
 //   if (tree == 0) {
 //      TFile *f = (TFile*)gROOT->GetListOfFiles()->FindObject("20200117_1240_0117_1414_sf1sf3_Dafne+xray_bottom_25kv_100ua.root");
 //      if (!f || !f->IsOpen()) {
-SDD::SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb ){
+//SDD::SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb ){
+SDD::SDD(TChain* inputChain, const char *fn,const char *fncalib, int fWhichData, float fLuminositypb){
+
   TTree *tree = 0;
 //  sfilein = (TString) fn;
 //  sfilecalib = (TString) fncalib;
@@ -167,7 +175,7 @@ SDD::SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb ){
   //fincalib = fin_pre + fincalib;
   sfilecalib = (TString) fincalib.c_str();
   cout<<" Input File "<<sfilein.Data()<<endl;
-  if(sfilein.Contains("xray")){
+  if(sfilein.Contains("xray")||sfilein.Contains("CALIB")||sfilein.Contains("calib")){
    IsCalib = true;
    cout<<endl<<" Contains xray -> CALIBRATION WILL BE PERFORMED "<<endl<<endl;
    CalibArray = new TObjArray();
@@ -184,15 +192,23 @@ SDD::SDD(char *fn, char *fncalib, int fWhichData, float fLuminositypb ){
 //  CalibArray = (TObjArray*) fcalib->Get("PeakFinder_G_G0")->Clone("CalibArray");
    }
   }
+
+  //Define output file:
   string fout_post;
   fout_post  = fn;
   string fout = "foutSDD_";
   fout += fout_post;
+  string fout_postpost = ".root";
+  fout += fout_postpost;
   sfileout = (TString) fout.c_str();
   cout<<" Output File "<<sfileout.Data()<<endl;
-  TFile *f = new TFile(sfilein);
-  f->GetObject("ft10",tree);
+
+  //get tree
+  //TFile *f = new TFile(sfilein);//old
+  //f->GetObject("ft10",tree);//old
+  tree = inputChain;
   Init(tree);
+
   //at the end set WhichData and Luminosity too:
   WhichData = fWhichData;
   if(fLuminositypb>0.&&fLuminositypb<99999.) Luminositypb = fLuminositypb;
